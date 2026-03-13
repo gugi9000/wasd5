@@ -1,0 +1,19 @@
+{% extends "base" %}
+
+{% block title %}Edit page — {{ slug }}{% endblock title %}
+
+{% block content %}
+  <h3>Edit page: {{ slug }}</h3>
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/admin/pages/edit/{{ slug }}">
+    <div class="mb-3">
+      <label for="content" class="form-label">Markdown content</label>
+      <textarea id="content" name="content" rows="16" class="form-control">{{ content }}</textarea>
+    </div>
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-secondary ms-2" href="/page/{{ slug }}">Cancel</a>
+  </form>
+{% endblock content %}

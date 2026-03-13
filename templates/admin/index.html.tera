@@ -1,0 +1,11 @@
+{% extends "base" %}
+{% block content %}
+<div class="container py-5">
+  <h2>Admin Dashboard</h2>
+  <ul>
+    <li><a href="/admin/pages/new">Create new page</a></li>
+    <li><a href="/admin/users">Manage users</a></li>
+    <li><a href="/admin/logout">Logout</a></li>
+  </ul>
+</div>
+{% endblock %}

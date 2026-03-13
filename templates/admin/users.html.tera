@@ -1,0 +1,23 @@
+{% extends "base" %}
+{% block content %}
+<div class="container py-5">
+  <h2>Users</h2>
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  <p><a class="btn btn-sm btn-primary" href="/admin/users/new">Create user</a></p>
+  <table class="table table-striped">
+    <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Created</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.role }}</td>
+        <td>{{ u.created_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

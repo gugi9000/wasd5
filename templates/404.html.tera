@@ -1,0 +1,12 @@
+{% extends "base" %}
+
+{% block title %}Not Found - Pages{% endblock title %}
+
+{% block content %}
+  <div class="alert alert-danger">
+    <h5 class="alert-heading">Page not found</h5>
+    <p>The page '{{ slug }}' could not be found.</p>
+    <hr>
+    <a class="btn btn-sm btn-primary" href="/">Return home</a>
+  </div>
+{% endblock content %}

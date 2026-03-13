@@ -1,0 +1,21 @@
+{% extends "base" %}
+
+{% block title %}New Page{% endblock title %}
+
+{% block content %}
+  <h3>Create New Page</h3>
+  <form method="post" action="/admin/pages/new">
+    <div class="mb-3">
+      <label for="slug" class="form-label">Slug (path or name)</label>
+      <input id="slug" name="slug" class="form-control" placeholder="my-new-page or folder/subpage" />
+    </div>
+    <div class="mb-3">
+      <label for="content" class="form-label">Markdown content</label>
+      <textarea id="content" name="content" rows="12" class="form-control"># New page</textarea>
+    </div>
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <button class="btn btn-primary">Create</button>
+    <a class="btn btn-secondary ms-2" href="/admin">Cancel</a>
+  </form>
+  <p>A new page in a sub folder will be hidden from navigation unless you layout it explicitly in the navigation settings.</p>
+{% endblock content %}

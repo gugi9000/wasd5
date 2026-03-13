@@ -1,0 +1,21 @@
+{% extends "base" %}
+
+{% block title %}Edit Landing — Admin{% endblock title %}
+
+{% block content %}
+  <h1 class="h3 mb-3">Edit Landing Page</h1>
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/admin/landing">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <div class="mb-3">
+      <label class="form-label">Content (Markdown)</label>
+      <textarea class="form-control" name="content" rows="12">{{ content | safe }}</textarea>
+    </div>
+    <div>
+      <button class="btn btn-primary" type="submit">Save</button>
+      <a class="btn btn-link" href="/">Preview</a>
+    </div>
+  </form>
+{% endblock content %}

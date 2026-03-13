@@ -1,0 +1,15 @@
+{% extends "base" %}
+
+{% block title %}{{ title }} — Pages{% endblock title %}
+
+{% block content %}
+  <article>
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <p class="fs-6 text-muted mb-0">Last updated: {{ last_updated }}</p>
+      {% if is_admin %}
+        <a class="btn btn-sm btn-outline-primary" href="/admin/pages/edit/{{ slug }}">Edit</a>
+      {% endif %}
+    </div>
+    <div class="page-content">{{ content | safe }}</div>
+  </article>
+{% endblock content %}
