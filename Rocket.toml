@@ -2,6 +2,11 @@
 address = "127.0.0.1"
 port = 5010
 
+[global.limits]
+# Allow large multipart form uploads (TempFile in admin upload forms)
+data-form = "1 GiB"
+file = "1 GiB"
+
 [release]
 log_level = "normal"
 secret_key="aSBhbSBzZWNyZXQgLSBhcmUgeW91IGEgc2VjcmV0cz8="

@@ -21,6 +21,7 @@
         <span>{{ p.title }}</span>
         <small class="text-muted">{{ p.modified_rel }}</small>
       </a>
+      <p class="mb-0 ms-3"><small class="text-muted">{{ p.slug | category }}</small></p>
     {% else %}
       <div class="list-group-item">No pages found.</div>
     {% endfor %}

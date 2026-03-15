@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{collections::HashMap, env};
 
@@ -9,6 +9,7 @@ use rocket::FromForm;
 use rocket::async_trait;
 use rocket::catch;
 use rocket::catchers;
+use rocket::fs::{FileServer, TempFile};
 use rocket::form::Form;
 use rocket::http::Status;
 use rocket::http::{Cookie, CookieJar};
@@ -30,6 +31,9 @@ use db::DbPool;
 use diesel::prelude::*;
 
 const PAGES_DIR: &str = "pages";
+const STATIC_DIR: &str = "static";
+const STATIC_FILES_DIR: &str = "static/files";
+const STATIC_PICTURES_DIR: &str = "static/pictures";
 
 #[derive(Serialize, Clone)]
 struct PageListing {
@@ -52,6 +56,13 @@ struct LatestItem {
     slug: String,
     title: String,
     modified_rel: String,
+}
+
+#[derive(Serialize)]
+struct AssetItem {
+    name: String,
+    url: String,
+    markdown: String,
 }
 
 fn markdown_to_html(md: &str) -> String {
@@ -90,6 +101,10 @@ fn test_slug_to_path() {
     assert_eq!(slug_to_category("landing/landing"), "/landing");
     assert_eq!(slug_to_category("singleword"), "/");
     assert_eq!(slug_to_category("two-words"), "/");
+    assert_eq!(
+        slug_to_category("realy/deep/category/words"),
+        "/realy/deep/category"
+    );
     assert_eq!(slug_to_category(""), "/");
 }
 
@@ -318,6 +333,99 @@ fn ensure_csrf(jar: &CookieJar) -> String {
     }
 }
 
+fn sanitize_upload_filename(input: &str) -> String {
+    let base = Path::new(input)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("upload.bin");
+    let mut out = String::with_capacity(base.len());
+    for ch in base.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+            out.push(ch);
+        } else if ch.is_ascii_whitespace() {
+            out.push('-');
+        }
+    }
+    while out.contains("--") {
+        out = out.replace("--", "-");
+    }
+    out.trim_matches('.').trim_matches('-').to_string()
+}
+
+fn unique_upload_path(dir: &Path, filename: &str) -> PathBuf {
+    let initial = dir.join(filename);
+    if !initial.exists() {
+        return initial;
+    }
+
+    let stem = Path::new(filename)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("upload");
+    let ext = Path::new(filename)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+
+    for i in 1..10_000 {
+        let candidate_name = if ext.is_empty() {
+            format!("{}-{}", stem, i)
+        } else {
+            format!("{}-{}.{}", stem, i, ext)
+        };
+        let candidate = dir.join(candidate_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    dir.join(format!("upload-{}", Utc::now().timestamp()))
+}
+
+fn is_allowed_picture_filename(filename: &str) -> bool {
+    let ext = Path::new(filename)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif"
+    )
+}
+
+fn list_static_assets(dir: &str, url_prefix: &str, as_image_markdown: bool) -> Vec<AssetItem> {
+    let mut items = Vec::new();
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return items,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let url = format!("{}/{}", url_prefix, name);
+        let markdown = if as_image_markdown {
+            format!("![]({})", url)
+        } else {
+            format!("[{}]({})", name, url)
+        };
+        items.push(AssetItem {
+            name: name.to_string(),
+            url,
+            markdown,
+        });
+    }
+
+    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items
+}
+
 #[derive(FromForm)]
 struct LoginForm {
     username: String,
@@ -378,13 +486,153 @@ fn admin_logout(jar: &CookieJar) -> Redirect {
     Redirect::to("/admin/login")
 }
 
-#[get("/admin")]
-fn admin_index(jar: &CookieJar) -> Result<Template, Redirect> {
+#[get("/admin?<warning>")]
+fn admin_index(jar: &CookieJar, warning: Option<&str>) -> Result<Template, Redirect> {
     if !is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
     let pages = read_pages();
-    Ok(Template::render("admin/index", context! { pages: pages }))
+    let csrf = ensure_csrf(jar);
+    let files = list_static_assets(STATIC_FILES_DIR, "/static/files", false);
+    let pictures = list_static_assets(STATIC_PICTURES_DIR, "/static/pictures", true);
+    Ok(Template::render(
+        "admin/index",
+        context! { pages: pages, csrf: csrf, files: files, pictures: pictures, warning: warning },
+    ))
+}
+
+#[post("/admin/upload/file", data = "<form>")]
+async fn admin_upload_file(jar: &CookieJar<'_>, form: Form<UploadForm<'_>>) -> Redirect {
+    if !is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+
+    let mut f = form.into_inner();
+    if let Some(form_csrf) = f.csrf.as_ref() {
+        if let Some(cookie_csrf) = jar.get_private("csrf") {
+            if cookie_csrf.value() != form_csrf.as_str() {
+                return Redirect::to("/admin");
+            }
+        } else {
+            return Redirect::to("/admin");
+        }
+    } else {
+        return Redirect::to("/admin");
+    }
+
+    let incoming = f
+        .upload
+        .raw_name()
+        .map(|n| n.dangerous_unsafe_unsanitized_raw().to_string())
+        .unwrap_or_else(|| "upload.bin".to_string());
+    let original_name = Path::new(&incoming)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("upload.bin")
+        .to_string();
+    let mut filename = sanitize_upload_filename(&incoming);
+    let sanitized_changed = filename != original_name;
+    if filename.is_empty() {
+        filename = format!("upload-{}.bin", Utc::now().timestamp());
+    }
+
+    if fs::create_dir_all(STATIC_FILES_DIR).is_err() {
+        return Redirect::to("/admin");
+    }
+    let target = unique_upload_path(Path::new(STATIC_FILES_DIR), &filename);
+    if f.upload.persist_to(&target).await.is_err() {
+        return Redirect::to("/admin");
+    }
+
+    if sanitized_changed {
+        Redirect::to("/admin?warning=filename_sanitized")
+    } else {
+        Redirect::to("/admin")
+    }
+}
+
+#[post("/admin/upload/picture", data = "<form>")]
+async fn admin_upload_picture(jar: &CookieJar<'_>, form: Form<UploadForm<'_>>) -> Redirect {
+    if !is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+
+    let mut f = form.into_inner();
+    if let Some(form_csrf) = f.csrf.as_ref() {
+        if let Some(cookie_csrf) = jar.get_private("csrf") {
+            if cookie_csrf.value() != form_csrf.as_str() {
+                return Redirect::to("/admin");
+            }
+        } else {
+            return Redirect::to("/admin");
+        }
+    } else {
+        return Redirect::to("/admin");
+    }
+
+    let incoming = f
+        .upload
+        .raw_name()
+        .map(|n| n.dangerous_unsafe_unsanitized_raw().to_string())
+        .unwrap_or_else(|| "image.bin".to_string());
+    let original_name = Path::new(&incoming)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image.bin")
+        .to_string();
+    let mut filename = sanitize_upload_filename(&incoming);
+    let sanitized_changed = filename != original_name;
+    if filename.is_empty() {
+        filename = format!("image-{}.bin", Utc::now().timestamp());
+    }
+
+    let content_type = f
+        .upload
+        .content_type()
+        .map(|ct| ct.to_string())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let is_image_content = content_type.starts_with("image/");
+    if !is_image_content {
+        return Redirect::to("/admin");
+    }
+
+    if !is_allowed_picture_filename(&filename)
+        && Path::new(&filename).extension().is_none()
+        && !content_type.is_empty()
+    {
+        let subtype = content_type
+            .split('/')
+            .nth(1)
+            .unwrap_or("img")
+            .split(';')
+            .next()
+            .unwrap_or("img");
+        let safe_subtype = subtype
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect::<String>();
+        let ext = if safe_subtype.is_empty() {
+            "img"
+        } else {
+            safe_subtype.as_str()
+        };
+        filename = format!("{}.{}", filename, ext);
+    }
+
+    if fs::create_dir_all(STATIC_PICTURES_DIR).is_err() {
+        return Redirect::to("/admin");
+    }
+    let target = unique_upload_path(Path::new(STATIC_PICTURES_DIR), &filename);
+    if f.upload.persist_to(&target).await.is_err() {
+        return Redirect::to("/admin");
+    }
+
+    if sanitized_changed {
+        Redirect::to("/admin?warning=filename_sanitized")
+    } else {
+        Redirect::to("/admin")
+    }
 }
 
 #[get("/admin/users")]
@@ -438,6 +686,12 @@ struct NewUserForm {
 #[derive(FromForm)]
 struct LandingForm {
     content: String,
+    csrf: Option<String>,
+}
+
+#[derive(FromForm)]
+struct UploadForm<'r> {
+    upload: TempFile<'r>,
     csrf: Option<String>,
 }
 
@@ -863,6 +1117,8 @@ async fn main() -> Result<(), rocket::Error> {
                 index,
                 admin_landing_get,
                 admin_landing_post,
+                admin_upload_file,
+                admin_upload_picture,
                 ip,
                 pages_index,
                 page_catch,
@@ -881,6 +1137,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_pages_new_post
             ],
         )
+        .mount("/static", FileServer::from(STATIC_DIR))
         .register("/", catchers![unauthorized])
         .attach(Template::custom(|engines| {
             engines.tera.register_filter("category", category_filter);

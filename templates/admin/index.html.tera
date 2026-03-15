@@ -2,10 +2,144 @@
 {% block content %}
 <div class="container py-5">
   <h2>Admin Dashboard</h2>
+  {% if warning == "filename_sanitized" %}
+    <div class="alert alert-warning" role="alert">
+      Filename was sanitized before saving (spaces and special characters may have been replaced).
+    </div>
+  {% endif %}
   <ul>
     <li><a href="/admin/pages/new">Create new page</a></li>
     <li><a href="/admin/users">Manage users</a></li>
     <li><a href="/admin/logout">Logout</a></li>
   </ul>
+
+  <hr />
+  <h4>Upload assets</h4>
+  <p class="text-muted">Files go to /static/files and pictures go to /static/pictures.</p>
+
+  <form method="post" action="/admin/upload/file" enctype="multipart/form-data" class="mb-4">
+    <div class="mb-2">
+      <label class="form-label" for="upload-file">Upload file</label>
+      <input id="upload-file" class="form-control" type="file" name="upload" required />
+      <input type="hidden" name="csrf" value="{{ csrf }}" />
+    </div>
+    <button class="btn btn-primary" type="submit">Upload to files</button>
+  </form>
+
+  <form method="post" action="/admin/upload/picture" enctype="multipart/form-data">
+    <div class="mb-2">
+      <label class="form-label" for="upload-picture">Upload picture</label>
+      <input id="upload-picture" class="form-control" type="file" name="upload" accept="image/*" required />
+      <input type="hidden" name="csrf" value="{{ csrf }}" />
+    </div>
+    <button class="btn btn-primary" type="submit">Upload to pictures</button>
+  </form>
+
+  <hr />
+  <h4>Uploaded files</h4>
+  <p class="text-muted">Copy direct URL or markdown link for content pages.</p>
+  {% if files | length > 0 %}
+    <div class="table-responsive mb-4">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Direct URL</th>
+            <th>Markdown</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in files %}
+            <tr>
+              <td><a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.name }}</a></td>
+              <td>
+                <div class="input-group input-group-sm">
+                  <input class="form-control" readonly value="{{ item.url }}" />
+                  <button type="button" class="btn btn-outline-secondary copy-btn" data-copy="{{ item.url }}">Copy</button>
+                </div>
+              </td>
+              <td>
+                <div class="input-group input-group-sm">
+                  <input class="form-control" readonly value="{{ item.markdown }}" />
+                  <button type="button" class="btn btn-outline-secondary copy-btn" data-copy="{{ item.markdown }}">Copy</button>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-muted">No uploaded files yet.</p>
+  {% endif %}
+
+  <h4>Uploaded pictures</h4>
+  <p class="text-muted">Copy image URL or markdown image syntax.</p>
+  {% if pictures | length > 0 %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Preview</th>
+            <th>Picture</th>
+            <th>Direct URL</th>
+            <th>Markdown</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in pictures %}
+            <tr>
+              <td>
+                <a href="{{ item.url }}" target="_blank" rel="noopener">
+                  <img
+                    src="{{ item.url }}"
+                    alt="{{ item.name }}"
+                    loading="lazy"
+                    style="width: 64px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid #d0d7de;"
+                  />
+                </a>
+              </td>
+              <td><a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.name }}</a></td>
+              <td>
+                <div class="input-group input-group-sm">
+                  <input class="form-control" readonly value="{{ item.url }}" />
+                  <button type="button" class="btn btn-outline-secondary copy-btn" data-copy="{{ item.url }}">Copy</button>
+                </div>
+              </td>
+              <td>
+                <div class="input-group input-group-sm">
+                  <input class="form-control" readonly value="{{ item.markdown }}" />
+                  <button type="button" class="btn btn-outline-secondary copy-btn" data-copy="{{ item.markdown }}">Copy</button>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-muted">No uploaded pictures yet.</p>
+  {% endif %}
 </div>
+
+<script>
+  document.addEventListener("click", async function (event) {
+    const button = event.target.closest(".copy-btn");
+    if (!button) return;
+    const value = button.getAttribute("data-copy") || "";
+    try {
+      await navigator.clipboard.writeText(value);
+      const original = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(function () {
+        button.textContent = original;
+      }, 1000);
+    } catch (_) {
+      button.textContent = "Copy failed";
+      setTimeout(function () {
+        button.textContent = "Copy";
+      }, 1200);
+    }
+  });
+</script>
 {% endblock %}
