@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
+use std::{collections::HashMap, env};
 
 use chrono::{TimeZone, Utc};
 use pulldown_cmark::{Options, Parser, html};
@@ -16,6 +17,7 @@ use rocket::response::Redirect;
 use rocket::response::status::NotFound;
 use rocket::serde::{Deserialize, json::Json};
 use rocket::{State, get, post, routes};
+use rocket_dyn_templates::tera;
 use rocket_dyn_templates::{Template, context};
 use serde::Serialize;
 use uuid::Uuid;
@@ -26,7 +28,6 @@ mod schema;
 use bcrypt::{DEFAULT_COST, hash, verify};
 use db::DbPool;
 use diesel::prelude::*;
-use std::env;
 
 const PAGES_DIR: &str = "pages";
 
@@ -62,6 +63,36 @@ fn markdown_to_html(md: &str) -> String {
     html_output
 }
 
+fn slug_to_category(slug: &str) -> String {
+    if let Some((category, _)) = slug.split_once('/') {
+        if category.is_empty() {
+            "/".to_string()
+        } else {
+            format!("/{}", category.to_lowercase())
+        }
+    } else {
+        "/".to_string()
+    }
+}
+
+fn category_filter(
+    value: &tera::Value,
+    _args: &HashMap<String, tera::Value>,
+) -> tera::Result<tera::Value> {
+    let slug = value
+        .as_str()
+        .ok_or_else(|| tera::Error::msg("category filter expects a string"))?;
+    tera::to_value(slug_to_category(slug)).map_err(|e| tera::Error::msg(e.to_string()))
+}
+
+#[test]
+fn test_slug_to_path() {
+    assert_eq!(slug_to_category("landing/landing"), "/landing");
+    assert_eq!(slug_to_category("singleword"), "/");
+    assert_eq!(slug_to_category("two-words"), "/");
+    assert_eq!(slug_to_category(""), "/");
+}
+
 fn collect_pages(dir: &std::path::Path, base: &std::path::Path, pages: &mut Vec<PageListing>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -70,12 +101,16 @@ fn collect_pages(dir: &std::path::Path, base: &std::path::Path, pages: &mut Vec<
         let path = e.path();
         if path.is_dir() {
             collect_pages(&path, base, pages);
-        } else if path.extension().and_then(|s| s.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
-            if let (Some(stem), Ok(rel)) = (path.file_stem().and_then(|s| s.to_str()), path.strip_prefix(base)) {
-                let slug = rel
-                    .with_extension("")
-                    .to_string_lossy()
-                    .replace('\\', "/");
+        } else if path
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+        {
+            if let (Some(stem), Ok(rel)) = (
+                path.file_stem().and_then(|s| s.to_str()),
+                path.strip_prefix(base),
+            ) {
+                let slug = rel.with_extension("").to_string_lossy().replace('\\', "/");
                 let title = stem.replace('-', " ");
                 let modified = match path.metadata().and_then(|m| m.modified()) {
                     Ok(t) => t
@@ -847,7 +882,9 @@ async fn main() -> Result<(), rocket::Error> {
             ],
         )
         .register("/", catchers![unauthorized])
-        .attach(Template::fairing());
+        .attach(Template::custom(|engines| {
+            engines.tera.register_filter("category", category_filter);
+        }));
 
     fig.launch().await?;
     Ok(())
