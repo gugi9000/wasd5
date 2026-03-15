@@ -1,13 +1,11 @@
 use std::env;
 
-use clap::{Parser, Subcommand};
 use bcrypt::hash;
-use chrono::Utc;
-
-use wasd5::db;
-use wasd5::models;
+use clap::{Parser, Subcommand};
 use diesel::prelude::*;
 use serde_json;
+use wasd5::db;
+use wasd5::models;
 
 #[derive(Parser)]
 #[command(author, version, about = "wasd5 admin CLI", long_about = None)]
@@ -44,7 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     }
 
     match cli.command {
-        Commands::CreateUser { username, password, role } => {
+        Commands::CreateUser {
+            username,
+            password,
+            role,
+        } => {
             use wasd5::schema::users::dsl::users;
             let role_val = role.unwrap_or_else(|| "member".to_string());
             let pw_hash = hash(&password, bcrypt::DEFAULT_COST)?;
@@ -59,9 +61,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
             println!("created user {}", username);
         }
         Commands::ListUsers => {
-            use wasd5::schema::users::dsl::{users, created_at};
+            use wasd5::schema::users::dsl::{created_at, users};
             let mut conn = pool.get()?;
-            let results = users.order(created_at.desc()).load::<models::User>(&mut conn)?;
+            let results = users
+                .order(created_at.desc())
+                .load::<models::User>(&mut conn)?;
             println!("{}", serde_json::to_string_pretty(&results)?);
         }
     }
