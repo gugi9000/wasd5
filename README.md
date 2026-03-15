@@ -10,7 +10,10 @@ cargo run --bin cli -- create-user admin mypassword --role admin
 
 the run the website:
 ```bash
-cargo run --bin wasd5
+## obtain random rescret:
+head -c64 /dev/urandom | base64
+## add that to Rocket.toml in production
+cargo run --bin wasd5 --release
 ```
 
 
