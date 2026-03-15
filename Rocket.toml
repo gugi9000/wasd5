@@ -1,5 +1,10 @@
 [global]
 address = "127.0.0.1"
 port = 5010
+
+[release]
+log_level = "normal"
 secret_key="aSBhbSBzZWNyZXQgLSBhcmUgeW91IGEgc2VjcmV0cz8="
 
+[debug]
+log_level = "debug"

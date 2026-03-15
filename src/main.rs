@@ -12,9 +12,9 @@ use rocket::form::Form;
 use rocket::http::SameSite;
 use rocket::http::Status;
 use rocket::http::{Cookie, CookieJar};
-use rocket::request::{FromRequest, Outcome, Request};
-use rocket::response::Redirect;
+use rocket::request::{self, FromRequest, Outcome, Request};
 use rocket::response::status::NotFound;
+use rocket::response::{Redirect, Response};
 use rocket::serde::{Deserialize, json::Json};
 use rocket::{State, get, post, routes};
 use rocket_dyn_templates::{Template, context};
@@ -102,8 +102,10 @@ fn read_pages() -> Vec<PageListing> {
 #[get("/")]
 fn index(jar: &CookieJar) -> Template {
     let pages = read_pages();
-    // Landing content stored in pages/ilanding/landing.md — fall back to a default welcome.
-    let mut landing_md = String::from("# Welcome\n\nWelcome to the simple Rocket + Tera site serving Markdown pages.");
+    // Landing content stored in pages/landing/landing.md — fall back to a default welcome.
+    let mut landing_md = String::from(
+        "# Welcome\n\nWelcome to the simple Rocket + Tera site serving Markdown pages.",
+    );
     let mut path = PathBuf::from(PAGES_DIR);
     path.push("landing/landing.md");
     if let Ok(s) = fs::read_to_string(&path) {
@@ -151,9 +153,43 @@ fn index(jar: &CookieJar) -> Template {
     )
 }
 
+struct RemoteAddr {
+    addr: String,
+}
+
+impl RemoteAddr {
+    fn addr(self) -> String {
+        self.addr
+    }
+}
+
+#[async_trait]
+impl<'r> FromRequest<'r> for RemoteAddr {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        if let Some(header) = req.headers().get_one("X-Forwarded-For") {
+            if let Some(addr) = header.split(',').next() {
+                return Outcome::Success(RemoteAddr {
+                    addr: addr.trim().to_string(),
+                });
+            }
+        }
+
+        if let Some(remote) = req.remote() {
+            return Outcome::Success(RemoteAddr {
+                addr: remote.ip().to_string(),
+            });
+        }
+
+        Outcome::Error((Status::BadRequest, ()))
+    }
+}
+
 #[get("/ip")]
-fn ip(addr: SocketAddr) -> String {
-    format!("{}\n", addr.ip())
+fn ip(req: RemoteAddr) -> String {
+    let remote_ip = req.addr();
+    format!("{}\n", remote_ip)
 }
 
 fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template>> {
@@ -466,7 +502,10 @@ fn admin_pages_new_get(jar: &CookieJar) -> Result<Template, Redirect> {
     }
     let pages = read_pages();
     let csrf = ensure_csrf(jar);
-    Ok(Template::render("admin/new_page", context! { pages: pages, csrf: csrf }))
+    Ok(Template::render(
+        "admin/new_page",
+        context! { pages: pages, csrf: csrf },
+    ))
 }
 
 #[post("/admin/pages/new", data = "<form>")]
@@ -490,17 +529,33 @@ fn admin_pages_new_post(jar: &CookieJar, form: Form<NewPageForm>) -> Redirect {
 
     // normalize slug
     let mut slug = f.slug.trim().to_string();
-    if slug.ends_with('/') { slug.pop(); }
-    if slug.ends_with(".md") { slug = slug.trim_end_matches(".md").to_string(); }
-    if slug.is_empty() { return Redirect::to("/admin/pages/new"); }
-    if slug.contains("..") { return Redirect::to("/admin/pages/new"); }
+    if slug.ends_with('/') {
+        slug.pop();
+    }
+    if slug.ends_with(".md") {
+        slug = slug.trim_end_matches(".md").to_string();
+    }
+    if slug.is_empty() {
+        return Redirect::to("/admin/pages/new");
+    }
+    if slug.contains("..") {
+        return Redirect::to("/admin/pages/new");
+    }
 
     // convert spaces to dashes for filename component
-    slug = slug.split('/').map(|s| s.trim().replace(' ', "-")).collect::<Vec<_>>().join("/");
+    slug = slug
+        .split('/')
+        .map(|s| s.trim().replace(' ', "-"))
+        .collect::<Vec<_>>()
+        .join("/");
 
     let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') { page_path.push(comp); }
-    if let Some(parent) = page_path.parent() { let _ = std::fs::create_dir_all(parent); }
+    for comp in slug.split('/') {
+        page_path.push(comp);
+    }
+    if let Some(parent) = page_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     page_path.set_extension("md");
 
     if let Err(_) = fs::write(&page_path, f.content.as_bytes()) {
@@ -520,19 +575,32 @@ fn admin_edit_page_get(path: std::path::PathBuf, jar: &CookieJar) -> Result<Temp
         .map(|s| s.to_string_lossy())
         .collect::<Vec<_>>()
         .join("/");
-    while slug.ends_with('/') { slug.pop(); }
-    if slug.is_empty() { return Err(Redirect::to("/admin")); }
+    while slug.ends_with('/') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        return Err(Redirect::to("/admin"));
+    }
     let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') { page_path.push(comp); }
+    for comp in slug.split('/') {
+        page_path.push(comp);
+    }
     page_path.set_extension("md");
     let content = fs::read_to_string(&page_path).unwrap_or_else(|_| String::new());
     let pages = read_pages();
     let csrf = ensure_csrf(jar);
-    Ok(Template::render("admin/edit_page", context! { pages: pages, slug: slug, content: content, csrf: csrf }))
+    Ok(Template::render(
+        "admin/edit_page",
+        context! { pages: pages, slug: slug, content: content, csrf: csrf },
+    ))
 }
 
 #[post("/admin/pages/edit/<path..>", data = "<form>")]
-fn admin_edit_page_post(path: std::path::PathBuf, jar: &CookieJar, form: Form<EditPageForm>) -> Redirect {
+fn admin_edit_page_post(
+    path: std::path::PathBuf,
+    jar: &CookieJar,
+    form: Form<EditPageForm>,
+) -> Redirect {
     if !is_admin_cookie(jar) {
         return Redirect::to("/admin/login");
     }
@@ -555,11 +623,17 @@ fn admin_edit_page_post(path: std::path::PathBuf, jar: &CookieJar, form: Form<Ed
         .map(|s| s.to_string_lossy())
         .collect::<Vec<_>>()
         .join("/");
-    while slug.ends_with('/') { slug.pop(); }
-    if slug.is_empty() { return Redirect::to("/admin"); }
+    while slug.ends_with('/') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        return Redirect::to("/admin");
+    }
 
     let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') { page_path.push(comp); }
+    for comp in slug.split('/') {
+        page_path.push(comp);
+    }
     // ensure parent dir exists
     if let Some(parent) = page_path.parent() {
         let _ = std::fs::create_dir_all(parent);
