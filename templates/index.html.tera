@@ -15,15 +15,28 @@
   </div>
 
   <h5>Pages updated lately</h5>
-  <div class="list-group">
-    {% for p in latest %}
-      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="/page/{{ p.slug }}">
-        <span>{{ p.title }}</span>
-        <small class="text-muted">{{ p.modified_rel }}</small>
-      </a>
-      <p class="mb-0 ms-3"><small class="text-muted">{{ p.slug | category }}</small></p>
-    {% else %}
-      <div class="list-group-item">No pages found.</div>
-    {% endfor %}
-  </div>
+  <table class="table table-borderless">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Last Modified</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if latest | length > 0 %}
+      {% for p in latest %}
+        <tr>
+          <td><a href="/page/{{ p.slug }}">{{ p.title }}</a></td>
+          <td>{{ p.slug | category }}</td>
+          <td>{{ p.modified_rel }}</td>
+        </tr>
+      {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="3">No pages found.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
 {% endblock content %}

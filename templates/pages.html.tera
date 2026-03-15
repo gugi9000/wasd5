@@ -14,6 +14,7 @@
         <thead>
           <tr>
             <th>Title</th>
+            <th>Category</th>
             <th class="text-end">Last updated</th>
           </tr>
         </thead>
@@ -21,6 +22,7 @@
           {% for p in items %}
             <tr>
               <td><a href="/page/{{ p.slug }}">{{ p.title }}</a></td>
+              <td>{{ p.slug | category }}</td>
               <td class="text-end"><small class="text-muted" title="{{ p.modified_str }}">{{ p.modified_rel }}</small></td>
             </tr>
           {% endfor %}
