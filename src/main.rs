@@ -62,34 +62,43 @@ fn markdown_to_html(md: &str) -> String {
     html_output
 }
 
-fn read_pages() -> Vec<PageListing> {
-    // recursively reads PAGES_DIR and return the pages found, with slug (path without extension), title (from filename), and modified timestamp for sorting
-    let mut pages = Vec::new();
-    let dir = std::path::Path::new(PAGES_DIR);
-    if let Ok(entries) = fs::read_dir(dir) {
-        for e in entries.flatten() {
-            let path = e.path();
-            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                if ext.eq_ignore_ascii_case("md") {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        let title = stem.replace('-', " ");
-                        let modified = match path.metadata().and_then(|m| m.modified()) {
-                            Ok(t) => t
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .map(|d| d.as_secs())
-                                .unwrap_or(0),
-                            Err(_) => 0,
-                        };
-                        pages.push(PageListing {
-                            slug: stem.to_string(),
-                            title,
-                            modified,
-                        });
-                    }
-                }
+fn collect_pages(dir: &std::path::Path, base: &std::path::Path, pages: &mut Vec<PageListing>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let path = e.path();
+        if path.is_dir() {
+            collect_pages(&path, base, pages);
+        } else if path.extension().and_then(|s| s.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+            if let (Some(stem), Ok(rel)) = (path.file_stem().and_then(|s| s.to_str()), path.strip_prefix(base)) {
+                let slug = rel
+                    .with_extension("")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let title = stem.replace('-', " ");
+                let modified = match path.metadata().and_then(|m| m.modified()) {
+                    Ok(t) => t
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0),
+                    Err(_) => 0,
+                };
+                pages.push(PageListing {
+                    slug,
+                    title,
+                    modified,
+                });
             }
         }
     }
+}
+
+fn read_pages() -> Vec<PageListing> {
+    // recursively reads PAGES_DIR and returns the pages found, with slug (path without extension), title (from filename), and modified timestamp for sorting
+    let mut pages = Vec::new();
+    let dir = std::path::Path::new(PAGES_DIR);
+    collect_pages(dir, dir, &mut pages);
     // newest first
     pages.sort_by(|a, b| b.modified.cmp(&a.modified));
     pages
