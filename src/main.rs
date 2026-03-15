@@ -9,19 +9,15 @@ use rocket::async_trait;
 use rocket::catch;
 use rocket::catchers;
 use rocket::form::Form;
-use rocket::http::SameSite;
 use rocket::http::Status;
 use rocket::http::{Cookie, CookieJar};
 use rocket::request::{self, FromRequest, Outcome, Request};
+use rocket::response::Redirect;
 use rocket::response::status::NotFound;
-use rocket::response::{Redirect, Response};
 use rocket::serde::{Deserialize, json::Json};
 use rocket::{State, get, post, routes};
 use rocket_dyn_templates::{Template, context};
 use serde::Serialize;
-use serde_json::json;
-use std::collections::HashMap;
-use std::net::SocketAddr;
 use uuid::Uuid;
 
 mod db;
@@ -30,7 +26,6 @@ mod schema;
 use bcrypt::{DEFAULT_COST, hash, verify};
 use db::DbPool;
 use diesel::prelude::*;
-use diesel::r2d2::ConnectionManager;
 use std::env;
 
 const PAGES_DIR: &str = "pages";
@@ -68,6 +63,7 @@ fn markdown_to_html(md: &str) -> String {
 }
 
 fn read_pages() -> Vec<PageListing> {
+    // recursively reads PAGES_DIR and return the pages found, with slug (path without extension), title (from filename), and modified timestamp for sorting
     let mut pages = Vec::new();
     let dir = std::path::Path::new(PAGES_DIR);
     if let Ok(entries) = fs::read_dir(dir) {
