@@ -980,6 +980,26 @@ fn listings_to_items(listings: &[PageListing]) -> Vec<PageItem> {
         .collect()
 }
 
+#[get("/page")]
+fn page_root(jar: &CookieJar) -> Result<Template, NotFound<Template>> {
+    // List pages from the root pages folder and render using the same template as /pages/
+    let mut pages = read_pages();
+    let all_pages = pages.clone();
+    // go through pages and filter to only those in the root (no slashes in slug), then sort by modified
+    pages.retain(|p| !p.slug.contains('/'));
+    pages.sort_by(|a, b| b.modified.cmp(&a.modified));
+    let items = listings_to_items(&pages);
+    let can_edit = is_admin_cookie(jar);
+    Ok(Template::render(
+        "folder",
+        context! { folder: "", folder_name: "Home", pages: all_pages, items: items, can_edit: can_edit },
+    ))
+
+}
+
+
+
+
 #[get("/page/<path..>")]
 fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, NotFound<Template>> {
     // join components into a slug, strip trailing ".md" and any trailing slashes
@@ -1080,6 +1100,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_upload_file,
                 admin_upload_picture,
                 ip,
+                page_root,
                 pages_index,
                 page_catch,
                 create_user,
