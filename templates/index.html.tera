@@ -8,12 +8,12 @@
       {{ landing_html | safe }}
       {% if can_edit %}
         <div class="mt-3">
-          <a class="btn btn-primary" href="/admin/pages/edit/landing/landing">Edit landing page</a>
+         <a class="btn btn-primary" href="/admin/pages/edit/landing/landing">Edit landing page</a>
         </div>
       {% endif %}
     </div>
   </div>
-
+{# 
   <h5>Pages updated lately</h5>
   <table class="table table-borderless">
     <thead>
@@ -38,5 +38,5 @@
         </tr>
       {% endif %}
     </tbody>
-  </table>
+  </table> #}
 {% endblock content %}
