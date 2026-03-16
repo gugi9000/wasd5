@@ -28,7 +28,7 @@
       {% for p in latest %}
         <tr>
           <td><a href="/page/{{ p.slug }}">{{ p.title }}</a></td>
-          <td>{{ p.slug | category }}</td>
+          <td class="mb-0 text-muted"><a href="/page/{{ p.slug | category }}">{{ p.slug | category }}</a></td>
           <td>{{ p.modified_rel }}</td>
         </tr>
       {% endfor %}

@@ -5,7 +5,7 @@
 {% block content %}
   <section class="mb-4">
     <h4 class="text-capitalize">{{ folder_name }}</h4>
-    <p class="mb-0 text-muted">Pages in <code>/page/{{ folder }}</code></p>
+    {# <p class="mb-0 text-muted">Pages in <code>/page/{{ folder }}</code></p> #}
   </section>
 
   <section>
