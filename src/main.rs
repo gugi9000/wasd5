@@ -998,6 +998,47 @@ fn list_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Json<Vec<models::
     Ok(Json(results))
 }
 
+fn listings_to_items(listings: &[PageListing]) -> Vec<PageItem> {
+    listings
+        .iter()
+        .map(|p| {
+            let mut modified_str = String::new();
+            let mut modified_rel = String::from("unknown");
+            if p.modified > 0 {
+                if let Some(dt) = Utc.timestamp_opt(p.modified as i64, 0).single() {
+                    modified_str = dt.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+                    let now = Utc::now().timestamp();
+                    let diff = now - dt.timestamp();
+                    modified_rel = if diff < 0 {
+                        String::from("in the future")
+                    } else if diff < 60 {
+                        format!("{}s ago", diff)
+                    } else if diff < 3600 {
+                        format!("{}m ago", diff / 60)
+                    } else if diff < 86400 {
+                        format!("{}h ago", diff / 3600)
+                    } else if diff < 7 * 86400 {
+                        format!("{}d ago", diff / 86400)
+                    } else if diff < 30 * 86400 {
+                        format!("{}w ago", diff / (7 * 86400))
+                    } else if diff < 365 * 86400 {
+                        format!("{}mo ago", diff / (30 * 86400))
+                    } else {
+                        format!("{}y ago", diff / (365 * 86400))
+                    };
+                }
+            }
+            PageItem {
+                slug: p.slug.clone(),
+                title: p.title.clone(),
+                modified: p.modified,
+                modified_str,
+                modified_rel,
+            }
+        })
+        .collect()
+}
+
 #[get("/page/<path..>")]
 fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, NotFound<Template>> {
     // join components into a slug, strip trailing ".md" and any trailing slashes
@@ -1017,6 +1058,22 @@ fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, Not
         // Shouldn't happen because /page is a separate route, but handle defensively
         return Err(NotFound(Template::render("404", context! { slug: "" })));
     }
+
+    // Check if slug resolves to a folder in the pages directory
+    let folder_path = PathBuf::from(PAGES_DIR).join(&slug);
+    if folder_path.is_dir() {
+        let mut folder_pages: Vec<PageListing> = Vec::new();
+        collect_pages(&folder_path, &PathBuf::from(PAGES_DIR), &mut folder_pages);
+        folder_pages.sort_by(|a, b| b.modified.cmp(&a.modified));
+        let items = listings_to_items(&folder_pages);
+        let folder_name = slug.split('/').last().unwrap_or(slug.as_str()).replace('-', " ");
+        let pages = read_pages();
+        return Ok(Template::render(
+            "folder",
+            context! { folder: &slug, folder_name: folder_name, pages: pages, items: items },
+        ));
+    }
+
     let admin = is_admin_cookie(jar);
     render_page(&slug, admin)
 }

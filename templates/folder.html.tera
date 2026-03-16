@@ -1,0 +1,34 @@
+{% extends "base" %}
+
+{% block title %}{{ folder_name }}{% endblock title %}
+
+{% block content %}
+  <section class="mb-4">
+    <h4 class="text-capitalize">{{ folder_name }}</h4>
+    <p class="mb-0 text-muted">Pages in <code>/page/{{ folder }}</code></p>
+  </section>
+
+  <section>
+    <div class="table-responsive mb-3">
+      <table class="table table-striped table-hover">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th class="text-end">Last updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in items %}
+            <tr>
+              <td><a href="/page/{{ p.slug }}">{{ p.title }}</a></td>
+              <td class="text-end"><small class="text-muted" title="{{ p.modified_str }}">{{ p.modified_rel }}</small></td>
+            </tr>
+          {% endfor %}
+          {% if items | length == 0 %}
+            <tr><td colspan="2">No pages found.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock content %}
