@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{collections::HashMap, env};
 
-use chrono::{TimeZone, Utc};
+use chrono::Utc;
 use pulldown_cmark::{Options, Parser, html};
 use rocket::FromForm;
 use rocket::async_trait;
@@ -24,9 +24,11 @@ use serde::Serialize;
 use uuid::Uuid;
 
 mod db;
+mod helpers;
 mod models;
 mod schema;
 use bcrypt::{DEFAULT_COST, hash, verify};
+use helpers::format_modified;
 use db::DbPool;
 use diesel::prelude::*;
 
@@ -173,27 +175,7 @@ fn index(jar: &CookieJar) -> Template {
     // Build latest items with relative modified timestamps
     let mut latest: Vec<LatestItem> = Vec::new();
     for p in pages.iter().take(5) {
-        let mut modified_rel = String::from("unknown");
-        if p.modified > 0 {
-            if let Some(dt) = Utc.timestamp_opt(p.modified as i64, 0).single() {
-                let now = Utc::now().timestamp();
-                let then = dt.timestamp();
-                let diff = now - then;
-                modified_rel = if diff < 0 {
-                    String::from("in the future")
-                } else if diff < 60 {
-                    format!("{}s ago", diff)
-                } else if diff < 3600 {
-                    format!("{}m ago", diff / 60)
-                } else if diff < 86400 {
-                    format!("{}h ago", diff / 3600)
-                } else if diff < 7 * 86400 {
-                    format!("{}d ago", diff / 86400)
-                } else {
-                    dt.format("%Y-%m-%d").to_string()
-                };
-            }
-        }
+        let (_, modified_rel) = format_modified(p.modified);
         latest.push(LatestItem {
             slug: p.slug.clone(),
             title: p.title.clone(),
@@ -276,24 +258,8 @@ fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template
     if let Ok(meta) = std::fs::metadata(&path) {
         if let Ok(modtime) = meta.modified() {
             if let Ok(dur) = modtime.duration_since(SystemTime::UNIX_EPOCH) {
-                let secs = dur.as_secs() as i64;
-                if let Some(dt) = Utc.timestamp_opt(secs, 0).single() {
-                    let abs = dt.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-                    let now = Utc::now().timestamp();
-                    let diff = now - dt.timestamp();
-                    let rel = if diff < 0 {
-                        String::from("in the future")
-                    } else if diff < 60 {
-                        format!("{}s ago", diff)
-                    } else if diff < 3600 {
-                        format!("{}m ago", diff / 60)
-                    } else if diff < 86400 {
-                        format!("{}h ago", diff / 3600)
-                    } else if diff < 7 * 86400 {
-                        format!("{}d ago", diff / 86400)
-                    } else {
-                        abs.clone()
-                    };
+                let (abs, rel) = format_modified(dur.as_secs());
+                if !abs.is_empty() {
                     last_updated = format!("{} ({})", abs, rel);
                 }
             }
@@ -1002,32 +968,7 @@ fn listings_to_items(listings: &[PageListing]) -> Vec<PageItem> {
     listings
         .iter()
         .map(|p| {
-            let mut modified_str = String::new();
-            let mut modified_rel = String::from("unknown");
-            if p.modified > 0 {
-                if let Some(dt) = Utc.timestamp_opt(p.modified as i64, 0).single() {
-                    modified_str = dt.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-                    let now = Utc::now().timestamp();
-                    let diff = now - dt.timestamp();
-                    modified_rel = if diff < 0 {
-                        String::from("in the future")
-                    } else if diff < 60 {
-                        format!("{}s ago", diff)
-                    } else if diff < 3600 {
-                        format!("{}m ago", diff / 60)
-                    } else if diff < 86400 {
-                        format!("{}h ago", diff / 3600)
-                    } else if diff < 7 * 86400 {
-                        format!("{}d ago", diff / 86400)
-                    } else if diff < 30 * 86400 {
-                        format!("{}w ago", diff / (7 * 86400))
-                    } else if diff < 365 * 86400 {
-                        format!("{}mo ago", diff / (30 * 86400))
-                    } else {
-                        format!("{}y ago", diff / (365 * 86400))
-                    };
-                }
-            }
+            let (modified_str, modified_rel) = format_modified(p.modified);
             PageItem {
                 slug: p.slug.clone(),
                 title: p.title.clone(),
@@ -1101,45 +1042,7 @@ fn pages_index(page: Option<usize>) -> Template {
     let items: Vec<PageItem> = if start >= end {
         Vec::new()
     } else {
-        pages[start..end]
-            .iter()
-            .map(|p| {
-                let mut modified_str = String::new();
-                let mut modified_rel = String::from("unknown");
-                if p.modified > 0 {
-                    if let Some(dt) = Utc.timestamp_opt(p.modified as i64, 0).single() {
-                        modified_str = dt.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-                        let now = Utc::now().timestamp();
-                        let then = dt.timestamp();
-                        let diff = now - then;
-                        modified_rel = if diff < 0 {
-                            String::from("in the future")
-                        } else if diff < 60 {
-                            format!("{}s ago", diff)
-                        } else if diff < 3600 {
-                            format!("{}m ago", diff / 60)
-                        } else if diff < 86400 {
-                            format!("{}h ago", diff / 3600)
-                        } else if diff < 7 * 86400 {
-                            format!("{}d ago", diff / 86400)
-                        } else if diff < 30 * 86400 {
-                            format!("{}w ago", diff / (7 * 86400))
-                        } else if diff < 365 * 86400 {
-                            format!("{}mo ago", diff / (30 * 86400))
-                        } else {
-                            format!("{}y ago", diff / (365 * 86400))
-                        };
-                    }
-                }
-                PageItem {
-                    slug: p.slug.clone(),
-                    title: p.title.clone(),
-                    modified: p.modified,
-                    modified_str,
-                    modified_rel,
-                }
-            })
-            .collect()
+        listings_to_items(&pages[start..end])
     };
 
     let page_numbers: Vec<usize> = (1..=total_pages).collect();
