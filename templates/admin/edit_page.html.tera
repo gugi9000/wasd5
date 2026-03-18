@@ -16,4 +16,5 @@
     <button class="btn btn-primary">Save</button>
     <a class="btn btn-secondary ms-2" href="/page/{{ slug }}">Cancel</a>
   </form>
+  <a href="https://pulldown-cmark.github.io/pulldown-cmark/cheat-sheet.html">Pulldown CMark Cheatsheet</a>
 {% endblock content %}
