@@ -27,7 +27,12 @@ mod db;
 mod helpers;
 mod models;
 mod schema;
+mod calendar;
 use bcrypt::{DEFAULT_COST, hash, verify};
+use calendar::{
+    api_calendar_create, api_calendar_delete, api_calendar_get, api_calendar_update,
+    calendar_index,
+};
 use helpers::format_modified;
 use db::DbPool;
 use diesel::prelude::*;
@@ -38,7 +43,7 @@ const STATIC_FILES_DIR: &str = "static/files";
 const STATIC_PICTURES_DIR: &str = "static/pictures";
 
 #[derive(Serialize, Clone)]
-struct PageListing {
+pub(crate) struct PageListing {
     slug: String,
     title: String,
     modified: u64,
@@ -146,7 +151,7 @@ fn collect_pages(dir: &std::path::Path, base: &std::path::Path, pages: &mut Vec<
     }
 }
 
-fn read_pages() -> Vec<PageListing> {
+pub(crate) fn read_pages() -> Vec<PageListing> {
     // recursively reads PAGES_DIR and returns the pages found, with slug (path without extension), title (from filename), and modified timestamp for sorting
     let mut pages = Vec::new();
     let dir = std::path::Path::new(PAGES_DIR);
@@ -272,7 +277,7 @@ fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template
     ))
 }
 
-fn is_admin_cookie(jar: &CookieJar) -> bool {
+pub(crate) fn is_admin_cookie(jar: &CookieJar) -> bool {
     let ok_role = jar
         .get_private("user_role")
         .map(|c| c.value() == "admin")
@@ -289,7 +294,7 @@ fn is_admin_cookie(jar: &CookieJar) -> bool {
     false
 }
 
-fn ensure_csrf(jar: &CookieJar) -> String {
+pub(crate) fn ensure_csrf(jar: &CookieJar) -> String {
     if let Some(c) = jar.get_private("csrf") {
         c.value().to_string()
     } else {
@@ -1115,7 +1120,12 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_edit_page_get,
                 admin_edit_page_post,
                 admin_pages_new_get,
-                admin_pages_new_post
+                admin_pages_new_post,
+                calendar_index,
+                api_calendar_get,
+                api_calendar_create,
+                api_calendar_update,
+                api_calendar_delete
             ],
         )
         .mount("/static", FileServer::from(STATIC_DIR))

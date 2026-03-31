@@ -10,6 +10,7 @@
   <ul>
     <li><a href="/admin/pages/new">Create new page</a></li>
     <li><a href="/admin/users">Manage users</a></li>
+    <li><a href="/calendar">Calendar</a></li>
     <li><a href="/admin/logout">Logout</a></li>
   </ul>
 

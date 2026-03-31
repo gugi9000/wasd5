@@ -10,3 +10,23 @@ diesel::table! {
         created_at -> BigInt,
     }
 }
+
+diesel::table! {
+    calendar_persons (id) {
+        id -> Integer,
+        name -> Text,
+        display_order -> Integer,
+    }
+}
+
+diesel::table! {
+    calendar_appointments (id) {
+        id -> Integer,
+        person_id -> Integer,
+        title -> Text,
+        date -> Text,
+        start_time -> Nullable<Text>,
+        end_time -> Nullable<Text>,
+        created_at -> BigInt,
+    }
+}

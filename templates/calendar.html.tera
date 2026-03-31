@@ -1,0 +1,329 @@
+{% extends "base" %}
+
+{% block title %}Kalender{% endblock title %}
+
+{% block content %}
+<meta name="csrf-token" content="{{ csrf }}">
+
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <h2 class="mb-0 me-2">Kalender</h2>
+  <button class="btn btn-sm btn-outline-secondary" id="btn-prev">&#8592; Forrige</button>
+  <button class="btn btn-sm btn-outline-secondary" id="btn-next">Næste &#8594;</button>
+  <button class="btn btn-sm btn-primary ms-auto" id="btn-new">+ Ny aftale</button>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-bordered table-sm align-middle" id="cal-table">
+    <thead class="table-dark sticky-top">
+      <tr>
+        <th style="min-width:90px">Dato</th>
+        {% for p in persons %}
+        <th>{{ p.name }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody id="cal-body">
+      {# Initial server-rendered rows — replaced by JS after first load #}
+    </tbody>
+  </table>
+</div>
+
+{# Bootstrap Modal for create / edit #}
+<div class="modal fade" id="apptModal" tabindex="-1" aria-labelledby="apptModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="apptModalLabel">Aftale</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Luk"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="appt-id" value="">
+        <div class="mb-3">
+          <label for="appt-person" class="form-label">Person</label>
+          <select class="form-select" id="appt-person">
+            {% for p in persons %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="appt-date" class="form-label">Dato</label>
+          <input type="date" class="form-control" id="appt-date">
+        </div>
+        <div class="mb-3">
+          <label for="appt-title" class="form-label">Titel</label>
+          <input type="text" class="form-control" id="appt-title" maxlength="200" placeholder="Beskrivelse">
+        </div>
+        <div class="row g-2">
+          <div class="col">
+            <label for="appt-start" class="form-label">Starttid <span class="text-muted">(valgfri)</span></label>
+            <input type="time" class="form-control" id="appt-start">
+          </div>
+          <div class="col">
+            <label for="appt-end" class="form-label">Sluttid <span class="text-muted">(valgfri)</span></label>
+            <input type="time" class="form-control" id="appt-end">
+          </div>
+        </div>
+        <div id="appt-error" class="text-danger mt-2" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-danger me-auto" id="btn-delete" style="display:none">Slet</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuller</button>
+        <button type="button" class="btn btn-primary" id="btn-save">Gem</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('load', function () {
+(function () {
+  const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+  const PERSONS = {{ persons | json_encode | safe }};
+
+  // Danish short day names (Date.getDay() is 0=Sun)
+  const DAY_DA = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
+  const MONTH_DA = ['Januar','Februar','Marts','April','Maj','Juni','Juli','August','September','Oktober','November','December'];
+
+  function parseDate(s) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function fmtDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function addDays(d, n) {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+  }
+
+  // State
+  let currentStart = parseDate("{{ start_date }}");
+  let currentEnd = parseDate("{{ end_date }}");
+  let currentAppointments = [];
+
+  // Render the table body from the flat appointments array
+  function renderCalendar(appointments, start, end) {
+    // Group by date then person_id
+    const byDate = {};
+    for (const a of appointments) {
+      if (!byDate[a.date]) byDate[a.date] = {};
+      if (!byDate[a.date][a.person_id]) byDate[a.date][a.person_id] = [];
+      byDate[a.date][a.person_id].push(a);
+    }
+
+    const tbody = document.getElementById('cal-body');
+    const rows = [];
+    let prevMonth = -1;
+
+    let d = new Date(start);
+    while (d <= end) {
+      const ds = fmtDate(d);
+      const month = d.getMonth();
+      const year = d.getFullYear();
+
+      // Month separator row
+      if (month !== prevMonth) {
+        rows.push(`<tr class="table-secondary"><th colspan="${PERSONS.length + 1}" class="text-center">${MONTH_DA[month]} ${year}</th></tr>`);
+        prevMonth = month;
+      }
+
+      const dayName = DAY_DA[d.getDay()];
+      const dayNum = d.getDate();
+      const isToday = ds === fmtDate(new Date());
+      const dateCellClass = isToday ? ' fw-bold text-primary' : '';
+
+      let tds = `<td class="text-nowrap${dateCellClass}" style="cursor:pointer" data-date="${ds}">${dayName}. ${dayNum}</td>`;
+
+      for (const p of PERSONS) {
+        const appts = (byDate[ds] && byDate[ds][p.id]) || [];
+        let cellHtml = '';
+        for (const a of appts) {
+          let label = a.title;
+          if (a.start_time) label = a.start_time + ' ' + label;
+          cellHtml += `<button class="btn btn-sm btn-outline-primary d-block w-100 text-start mb-1 appt-btn" data-id="${a.id}">${escHtml(label)}</button>`;
+        }
+        tds += `<td data-date="${ds}" data-person="${p.id}" style="min-width:120px">${cellHtml}</td>`;
+      }
+
+      rows.push(`<tr>${tds}</tr>`);
+      d = addDays(d, 1);
+    }
+
+    tbody.innerHTML = rows.join('');
+
+    // Click on date cell → new appointment for that date
+    tbody.querySelectorAll('td[data-date]').forEach(td => {
+      td.addEventListener('click', e => {
+        if (e.target.classList.contains('appt-btn') || e.target.closest('.appt-btn')) return;
+        const date = td.dataset.date;
+        const personId = td.dataset.person ? parseInt(td.dataset.person) : null;
+        openCreateModal(date, personId);
+      });
+    });
+
+    // Click on appointment button → edit
+    tbody.querySelectorAll('.appt-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        const appt = appointments.find(a => a.id === id);
+        if (appt) openEditModal(appt);
+      });
+    });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Modal helpers — lazy-initialized so Bootstrap is loaded before first use
+  document.body.appendChild(document.getElementById('apptModal'));
+  let _modal = null;
+  function getModal() {
+    if (!_modal) _modal = new bootstrap.Modal(document.getElementById('apptModal'));
+    return _modal;
+  }
+  const elId = document.getElementById('appt-id');
+  const elPerson = document.getElementById('appt-person');
+  const elDate = document.getElementById('appt-date');
+  const elTitle = document.getElementById('appt-title');
+  const elStart = document.getElementById('appt-start');
+  const elEnd = document.getElementById('appt-end');
+  const elError = document.getElementById('appt-error');
+  const btnDelete = document.getElementById('btn-delete');
+  const btnSave = document.getElementById('btn-save');
+
+  function clearModal() {
+    elId.value = '';
+    elPerson.value = PERSONS[0]?.id ?? '';
+    elDate.value = '';
+    elTitle.value = '';
+    elStart.value = '';
+    elEnd.value = '';
+    elError.style.display = 'none';
+    elError.textContent = '';
+    btnDelete.style.display = 'none';
+    document.getElementById('apptModalLabel').textContent = 'Ny aftale';
+  }
+
+  function openCreateModal(date, personId) {
+    clearModal();
+    if (date) elDate.value = date;
+    if (personId) elPerson.value = personId;
+    getModal().show();
+  }
+
+  function openEditModal(appt) {
+    clearModal();
+    elId.value = appt.id;
+    elPerson.value = appt.person_id;
+    elDate.value = appt.date;
+    elTitle.value = appt.title;
+    elStart.value = appt.start_time || '';
+    elEnd.value = appt.end_time || '';
+    btnDelete.style.display = '';
+    document.getElementById('apptModalLabel').textContent = 'Rediger aftale';
+    getModal().show();
+  }
+
+  function showError(msg) {
+    elError.textContent = msg;
+    elError.style.display = '';
+  }
+
+  async function fetchAppointments() {
+    const s = fmtDate(currentStart);
+    const e = fmtDate(currentEnd);
+    const resp = await fetch(`/api/calendar/appointments?start=${s}&end=${e}`);
+    if (!resp.ok) throw new Error('Kunne ikke hente aftaler');
+    const data = await resp.json();
+    return data.appointments;
+  }
+
+  async function refreshCalendar() {
+    try {
+      currentAppointments = await fetchAppointments();
+      renderCalendar(currentAppointments, currentStart, currentEnd);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  btnSave.addEventListener('click', async () => {
+    const id = elId.value;
+    const payload = {
+      csrf: CSRF,
+      person_id: parseInt(elPerson.value),
+      title: elTitle.value.trim(),
+      date: elDate.value,
+      start_time: elStart.value || null,
+      end_time: elEnd.value || null,
+    };
+    if (!payload.title) { showError('Titel er påkrævet'); return; }
+    if (!payload.date) { showError('Dato er påkrævet'); return; }
+
+    const url = id ? `/api/calendar/appointments/${id}` : '/api/calendar/appointments';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) { showError('Fejl ved gemning (' + resp.status + ')'); return; }
+      getModal().hide();
+      await refreshCalendar();
+    } catch (err) {
+      showError('Netværksfejl');
+    }
+  });
+
+  btnDelete.addEventListener('click', async () => {
+    const id = elId.value;
+    if (!id) return;
+    if (!confirm('Slet denne aftale?')) return;
+    try {
+      const resp = await fetch(`/api/calendar/appointments/${id}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrf: CSRF }),
+      });
+      if (!resp.ok) { showError('Fejl ved sletning'); return; }
+      getModal().hide();
+      await refreshCalendar();
+    } catch (err) {
+      showError('Netværksfejl');
+    }
+  });
+
+  document.getElementById('btn-new').addEventListener('click', () => {
+    openCreateModal(fmtDate(new Date()), null);
+  });
+
+  document.getElementById('btn-prev').addEventListener('click', () => {
+    const span = Math.round((currentEnd - currentStart) / 86400000);
+    currentStart = addDays(currentStart, -14);
+    currentEnd = addDays(currentStart, span);
+    refreshCalendar();
+  });
+
+  document.getElementById('btn-next').addEventListener('click', () => {
+    const span = Math.round((currentEnd - currentStart) / 86400000);
+    currentStart = addDays(currentStart, 14);
+    currentEnd = addDays(currentStart, span);
+    refreshCalendar();
+  });
+
+  // Initial render via API avoids Tera JSON serialization issues for appointments
+  refreshCalendar();
+})();
+});
+
+</script>
+{% endblock content %}
