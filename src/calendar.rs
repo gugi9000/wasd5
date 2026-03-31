@@ -57,7 +57,7 @@ pub fn calendar_index(
 
     let today = Utc::now().date_naive();
     let start_date = today - Duration::days(2);
-    let end_date = today + Duration::days(32);
+    let end_date = today + Duration::days(21);
     let start_str = start_date.format("%Y-%m-%d").to_string();
     let end_str = end_date.format("%Y-%m-%d").to_string();
 

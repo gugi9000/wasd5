@@ -133,7 +133,7 @@ window.addEventListener('load', function () {
 
       // Month separator row
       if (month !== prevMonth) {
-        rows.push(`<tr class="table-secondary"><th colspan="${PERSONS.length + 1}" class="text-center">${MONTH_DA[month]} ${year}</th></tr>`);
+        rows.push(`<tr class="table-brand"><th colspan="${PERSONS.length + 1}" class="text-center">${MONTH_DA[month]} ${year}</th></tr>`);
         prevMonth = month;
       }
 
@@ -142,7 +142,7 @@ window.addEventListener('load', function () {
       const isToday = ds === fmtDate(new Date());
       const dateCellClass = isToday ? ' fw-bold text-primary' : '';
 
-      let tds = `<td class="text-nowrap${dateCellClass}" style="cursor:pointer" data-date="${ds}">${dayName}. ${dayNum}</td>`;
+      let tds = `<td class="text-end text-nowrap${dateCellClass}" style="cursor:pointer" data-date="${ds}">${dayName}. ${dayNum}</td>`;
 
       for (const p of PERSONS) {
         const appts = (byDate[ds] && byDate[ds][p.id]) || [];
