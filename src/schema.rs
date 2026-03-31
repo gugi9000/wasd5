@@ -30,3 +30,11 @@ diesel::table! {
         created_at -> BigInt,
     }
 }
+
+diesel::table! {
+    calendar_allowed_ips (id) {
+        id -> Integer,
+        ip_address -> Text,
+        created_at -> BigInt,
+    }
+}

@@ -86,9 +86,18 @@
         </button>
         <div class="collapse navbar-collapse" id="mainNavbar">
           <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item"><a class="nav-link" href="/ip">Your IP</a></li>
+            <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Your IP
+          </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="/ip">Raw text</a></li>
+            <li><a class="dropdown-item" href="#" id="remote-ip-value">Loading...</a></li>
+          </ul>
+        </li>
             <li class="nav-item"><a class="nav-link" href="/pages">All pages</a></li>
             <li class="nav-item"><a class="nav-link" href="https://hosted.fair-it.dk/owa/">Webmail</a></li>
+            <li class="nav-item d-none" id="calendar-nav-item"><a class="nav-link" href="/calendar">Kalender</a></li>
           </ul>
           <div class="d-flex align-items-center">
             <a href="/admin"><button class="btn btn-outline-secondary btn-sm me-2" aria-label="Outlink">Admin</button></a>
@@ -100,11 +109,12 @@
 
     <div class="container">
       <div class="row">
-        <main class="col-lg-8 mb-4">
+        <main class="{% block main_class %}col-lg-8{% endblock main_class %} mb-4">
           <div class="card p-4">
             {% block content %}{% endblock content %}
           </div>
         </main>
+        {% block sidebar %}
         <aside class="col-lg-4">
           <div class="card p-3">
             <h5 class="mb-3">Lastest edits</h5>
@@ -120,6 +130,7 @@
             </div>
           </div>
         </aside>
+        {% endblock sidebar %}
       </div>
       <div class="container">
       <p class="fs-6 fw-light text-center fixed-bottom">wasd.dk - &copy; 1998 - 2026</p>
@@ -144,6 +155,37 @@
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
         // set initial label
         btn.textContent = current() === 'dark' ? '🔆' : '🌙';
+      })();
+
+      // Resolve remote IP from existing /ip route for all pages using base template.
+      (function(){
+        const ipEl = document.getElementById('remote-ip-value');
+        if (!ipEl) return;
+        fetch('/ip')
+          .then(r => r.ok ? r.text() : Promise.reject(new Error('ip fetch failed')))
+          .then(t => {
+            const ip = (t || '').trim();
+            ipEl.textContent = ip || 'Unknown';
+          })
+          .catch(() => {
+            ipEl.textContent = 'Unknown';
+          });
+      })();
+
+      // Show calendar link when the current request has calendar access.
+      (function(){
+        const navItem = document.getElementById('calendar-nav-item');
+        if (!navItem) return;
+        fetch('/api/calendar/access')
+          .then(r => r.ok ? r.json() : Promise.reject(new Error('calendar access failed')))
+          .then(data => {
+            if (data && data.allowed === true) {
+              navItem.classList.remove('d-none');
+            }
+          })
+          .catch(() => {
+            // Keep hidden on failure.
+          });
       })();
     </script>
   </body>

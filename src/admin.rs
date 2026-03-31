@@ -182,7 +182,11 @@ pub(crate) fn admin_logout(jar: &CookieJar) -> Redirect {
 }
 
 #[get("/admin?<warning>")]
-pub(crate) fn admin_index(jar: &CookieJar, warning: Option<&str>) -> Result<Template, Redirect> {
+pub(crate) fn admin_index(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    warning: Option<&str>,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
@@ -190,10 +194,98 @@ pub(crate) fn admin_index(jar: &CookieJar, warning: Option<&str>) -> Result<Temp
     let csrf = crate::ensure_csrf(jar);
     let files = list_static_assets(STATIC_FILES_DIR, "/static/files", false);
     let pictures = list_static_assets(STATIC_PICTURES_DIR, "/static/pictures", true);
+    use crate::schema::calendar_allowed_ips::dsl as aid;
+    let calendar_allowed_ips_text = if let Ok(mut conn) = pool.get() {
+        aid::calendar_allowed_ips
+            .order(aid::ip_address.asc())
+            .load::<models::CalendarAllowedIp>(&mut conn)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|r| r.ip_address)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     Ok(Template::render(
         "admin/index",
-        context! { pages: pages, csrf: csrf, files: files, pictures: pictures, warning: warning },
+        context! {
+            pages: pages,
+            csrf: csrf,
+            files: files,
+            pictures: pictures,
+            warning: warning,
+            calendar_allowed_ips_text: calendar_allowed_ips_text
+        },
     ))
+}
+
+#[derive(FromForm)]
+pub(crate) struct CalendarAllowedIpsForm {
+    allowed_ips: String,
+    csrf: Option<String>,
+}
+
+#[post("/admin/calendar/allowed-ips", data = "<form>")]
+pub(crate) fn admin_update_calendar_allowed_ips(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    form: Form<CalendarAllowedIpsForm>,
+) -> Redirect {
+    if !crate::is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+
+    let f = form.into_inner();
+    if let Some(form_csrf) = f.csrf.as_ref() {
+        if let Some(cookie_csrf) = jar.get_private("csrf") {
+            if cookie_csrf.value() != form_csrf.as_str() {
+                return Redirect::to("/admin");
+            }
+        } else {
+            return Redirect::to("/admin");
+        }
+    } else {
+        return Redirect::to("/admin");
+    }
+
+    let mut parsed: Vec<String> = Vec::new();
+    for line in f.allowed_ips.lines() {
+        let ip = line.trim();
+        if ip.is_empty() {
+            continue;
+        }
+        if ip.len() > 64 {
+            continue;
+        }
+        if !ip
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '.' || c == ':' )
+        {
+            continue;
+        }
+        if !parsed.iter().any(|v| v == ip) {
+            parsed.push(ip.to_string());
+        }
+    }
+
+    use crate::schema::calendar_allowed_ips::dsl as aid;
+    if let Ok(mut conn) = pool.get() {
+        let _ = diesel::delete(aid::calendar_allowed_ips).execute(&mut conn);
+        for ip in parsed {
+            let row = models::NewCalendarAllowedIp {
+                ip_address: &ip,
+                created_at: Utc::now().timestamp(),
+            };
+            let _ = diesel::insert_into(aid::calendar_allowed_ips)
+                .values(&row)
+                .execute(&mut conn);
+        }
+    }
+
+    Redirect::to("/admin")
 }
 
 #[derive(FromForm)]

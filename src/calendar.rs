@@ -9,9 +9,42 @@ use rocket_dyn_templates::{Template, context};
 use crate::db::DbPool;
 use crate::models;
 
+fn is_ip_allowed(pool: &State<DbPool>, ip: &str) -> bool {
+    use crate::schema::calendar_allowed_ips::dsl as aid;
+    let mut conn = match pool.get() {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    aid::calendar_allowed_ips
+        .filter(aid::ip_address.eq(ip))
+        .first::<models::CalendarAllowedIp>(&mut conn)
+        .optional()
+        .map(|v| v.is_some())
+        .unwrap_or(false)
+}
+
+fn can_access_calendar(jar: &CookieJar, pool: &State<DbPool>, remote: &crate::RemoteAddr) -> bool {
+    crate::is_admin_cookie(jar) || is_ip_allowed(pool, remote.addr())
+}
+
+#[get("/api/calendar/access")]
+pub fn api_calendar_access(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
+) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "allowed": can_access_calendar(jar, pool, &remote)
+    }))
+}
+
 #[get("/calendar")]
-pub fn calendar_index(jar: &CookieJar, pool: &State<DbPool>) -> Result<Template, Redirect> {
-    if !crate::is_admin_cookie(jar) {
+pub fn calendar_index(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
+) -> Result<Template, Redirect> {
+    if !can_access_calendar(jar, pool, &remote) {
         return Err(Redirect::to("/admin/login"));
     }
     use crate::schema::calendar_persons::dsl as pd;
@@ -90,10 +123,11 @@ fn validate_time(s: &str) -> bool {
 pub fn api_calendar_get(
     jar: &CookieJar,
     pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
     start: Option<String>,
     end: Option<String>,
 ) -> Result<Json<serde_json::Value>, Status> {
-    if !crate::is_admin_cookie(jar) {
+    if !can_access_calendar(jar, pool, &remote) {
         return Err(Status::Unauthorized);
     }
     use crate::schema::calendar_appointments::dsl as ad;
@@ -126,9 +160,10 @@ pub fn api_calendar_get(
 pub fn api_calendar_create(
     jar: &CookieJar,
     pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
     payload: Json<CalendarApptPayload>,
 ) -> Result<Json<models::CalendarAppointment>, Status> {
-    if !crate::is_admin_cookie(jar) {
+    if !can_access_calendar(jar, pool, &remote) {
         return Err(Status::Unauthorized);
     }
     if !validate_calendar_csrf(jar, &payload.csrf) {
@@ -179,9 +214,10 @@ pub fn api_calendar_update(
     id: i32,
     jar: &CookieJar,
     pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
     payload: Json<CalendarApptPayload>,
 ) -> Result<Json<models::CalendarAppointment>, Status> {
-    if !crate::is_admin_cookie(jar) {
+    if !can_access_calendar(jar, pool, &remote) {
         return Err(Status::Unauthorized);
     }
     if !validate_calendar_csrf(jar, &payload.csrf) {
@@ -230,9 +266,10 @@ pub fn api_calendar_delete(
     id: i32,
     jar: &CookieJar,
     pool: &State<DbPool>,
+    remote: crate::RemoteAddr,
     payload: Json<CalendarDeletePayload>,
 ) -> Result<Json<serde_json::Value>, Status> {
-    if !crate::is_admin_cookie(jar) {
+    if !can_access_calendar(jar, pool, &remote) {
         return Err(Status::Unauthorized);
     }
     if !validate_calendar_csrf(jar, &payload.csrf) {

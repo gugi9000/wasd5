@@ -2,6 +2,9 @@
 
 {% block title %}Kalender{% endblock title %}
 
+{% block main_class %}col-12{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+
 {% block content %}
 <meta name="csrf-token" content="{{ csrf }}">
 

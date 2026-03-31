@@ -1,4 +1,4 @@
-use super::schema::{users, calendar_persons, calendar_appointments};
+use super::schema::{calendar_allowed_ips, calendar_appointments, calendar_persons, users};
 use serde::Serialize;
 use diesel::prelude::*;
 
@@ -56,5 +56,20 @@ pub struct NewCalendarAppointment<'a> {
     pub date: &'a str,
     pub start_time: Option<&'a str>,
     pub end_time: Option<&'a str>,
+    pub created_at: i64,
+}
+
+#[derive(Queryable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = calendar_allowed_ips)]
+pub struct CalendarAllowedIp {
+    pub id: i32,
+    pub ip_address: String,
+    pub created_at: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = calendar_allowed_ips)]
+pub struct NewCalendarAllowedIp<'a> {
+    pub ip_address: &'a str,
     pub created_at: i64,
 }

@@ -30,10 +30,11 @@ use admin::{
     admin_edit_page_get, admin_edit_page_post, admin_index, admin_landing_get, admin_landing_post,
     admin_login_get, admin_login_post, admin_logout, admin_pages_new_get, admin_pages_new_post,
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
-    create_user, list_users,
+    admin_update_calendar_allowed_ips, create_user, list_users,
 };
 use calendar::{
-    api_calendar_create, api_calendar_delete, api_calendar_get, api_calendar_update,
+    api_calendar_access, api_calendar_create, api_calendar_delete, api_calendar_get,
+    api_calendar_update,
     calendar_index,
 };
 use helpers::format_modified;
@@ -187,13 +188,13 @@ fn index(jar: &CookieJar) -> Template {
     )
 }
 
-struct RemoteAddr {
+pub(crate) struct RemoteAddr {
     addr: String,
 }
 
 impl RemoteAddr {
-    fn addr(self) -> String {
-        self.addr
+    pub(crate) fn addr(&self) -> &str {
+        &self.addr
     }
 }
 
@@ -215,16 +216,17 @@ impl<'r> FromRequest<'r> for RemoteAddr {
                 addr: remote.ip().to_string(),
             });
         }
-
         Outcome::Error((Status::BadRequest, ()))
     }
 }
+
 
 #[get("/ip")]
 fn ip(req: RemoteAddr) -> String {
     let remote_ip = req.addr();
     format!("{}\n", remote_ip)
 }
+
 
 fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template>> {
     let mut path = PathBuf::from(PAGES_DIR);
@@ -336,8 +338,6 @@ fn page_root(jar: &CookieJar) -> Result<Template, NotFound<Template>> {
 }
 
 
-
-
 #[get("/page/<path..>")]
 fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, NotFound<Template>> {
     // join components into a slug, strip trailing ".md" and any trailing slashes
@@ -437,6 +437,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_landing_post,
                 admin_upload_file,
                 admin_upload_picture,
+                admin_update_calendar_allowed_ips,
                 ip,
                 page_root,
                 pages_index,
@@ -455,6 +456,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_pages_new_get,
                 admin_pages_new_post,
                 calendar_index,
+                api_calendar_access,
                 api_calendar_get,
                 api_calendar_create,
                 api_calendar_update,
