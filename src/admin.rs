@@ -26,6 +26,14 @@ struct AssetItem {
     name: String,
     url: String,
     markdown: String,
+    rel_path: String,
+}
+
+#[derive(Serialize)]
+struct PictureFolderItem {
+    name: String,
+    path: String,
+    is_current: bool,
 }
 
 fn sanitize_upload_filename(input: &str) -> String {
@@ -77,6 +85,141 @@ fn unique_upload_path(dir: &Path, filename: &str) -> PathBuf {
     dir.join(format!("upload-{}", Utc::now().timestamp()))
 }
 
+fn is_safe_folder_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+fn normalize_picture_folder(input: &str) -> Option<String> {
+    let raw = input.trim().replace('\\', "/");
+    if raw.is_empty() {
+        return Some(String::new());
+    }
+
+    let mut parts = Vec::new();
+    for part in raw.split('/') {
+        let segment = part.trim();
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." || !is_safe_folder_segment(segment) {
+            return None;
+        }
+        parts.push(segment.to_string());
+    }
+
+    Some(parts.join("/"))
+}
+
+fn picture_folder_fs_path(folder: &str) -> PathBuf {
+    let mut path = PathBuf::from(STATIC_PICTURES_DIR);
+    if !folder.is_empty() {
+        for segment in folder.split('/') {
+            path.push(segment);
+        }
+    }
+    path
+}
+
+fn picture_folder_url(folder: &str) -> String {
+    if folder.is_empty() {
+        "/static/pictures".to_string()
+    } else {
+        format!("/static/pictures/{}", folder)
+    }
+}
+
+fn admin_pictures_url(folder: &str, warning: Option<&str>) -> String {
+    let mut query_parts = Vec::new();
+    if !folder.is_empty() {
+        query_parts.push(format!("folder={}", folder));
+    }
+    if let Some(w) = warning {
+        query_parts.push(format!("warning={}", w));
+    }
+    if query_parts.is_empty() {
+        "/admin/pictures".to_string()
+    } else {
+        format!("/admin/pictures?{}", query_parts.join("&"))
+    }
+}
+
+fn redirect_admin_pictures(folder: &str, warning: Option<&str>) -> Redirect {
+    Redirect::to(admin_pictures_url(folder, warning))
+}
+
+fn collect_picture_folders_recursive(base: &Path, current: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(current) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let Ok(relative) = path.strip_prefix(base) else {
+            continue;
+        };
+
+        let rel = relative.to_string_lossy().replace('\\', "/");
+        if !rel.is_empty() {
+            out.push(rel.clone());
+            collect_picture_folders_recursive(base, &path, out);
+        }
+    }
+}
+
+fn list_picture_folders() -> Vec<String> {
+    let base = Path::new(STATIC_PICTURES_DIR);
+    let mut folders = vec![String::new()];
+    if fs::create_dir_all(base).is_err() {
+        return folders;
+    }
+    collect_picture_folders_recursive(base, base, &mut folders);
+    folders.sort_by_key(|f| f.to_ascii_lowercase());
+    folders.dedup();
+    folders
+}
+
+fn list_picture_assets_for_folder(folder: &str) -> Vec<AssetItem> {
+    let mut items = Vec::new();
+    let folder_path = picture_folder_fs_path(folder);
+    let url_prefix = picture_folder_url(folder);
+
+    let entries = match fs::read_dir(folder_path) {
+        Ok(entries) => entries,
+        Err(_) => return items,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let url = format!("{}/{}", url_prefix, name);
+        items.push(AssetItem {
+            name: name.to_string(),
+            url: url.clone(),
+            markdown: format!("![]({})", url),
+            rel_path: if folder.is_empty() {
+                name.to_string()
+            } else {
+                format!("{}/{}", folder, name)
+            },
+        });
+    }
+
+    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items
+}
+
 fn is_allowed_picture_filename(filename: &str) -> bool {
     let ext = Path::new(filename)
         .extension()
@@ -114,6 +257,7 @@ fn list_static_assets(dir: &str, url_prefix: &str, as_image_markdown: bool) -> V
             name: name.to_string(),
             url,
             markdown,
+            rel_path: name.to_string(),
         });
     }
 
@@ -210,20 +354,93 @@ pub(crate) fn admin_files_get(
     ))
 }
 
-#[get("/admin/pictures?<warning>")]
+#[get("/admin/pictures?<warning>&<folder>")]
 pub(crate) fn admin_pictures_get(
     jar: &CookieJar,
     warning: Option<&str>,
+    folder: Option<&str>,
 ) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
+
+    let folder = match folder {
+        Some(value) => match normalize_picture_folder(value) {
+            Some(v) => v,
+            None => return Ok(Template::render(
+                "admin/pictures",
+                context! {
+                    pages: crate::read_pages(),
+                    csrf: crate::ensure_csrf(jar),
+                    pictures: Vec::<AssetItem>::new(),
+                    picture_folders: Vec::<PictureFolderItem>::new(),
+                    all_folders: vec![String::new()],
+                    current_folder: String::new(),
+                    current_folder_label: String::from("/"),
+                    current_folder_static_path: String::from("/static/pictures"),
+                    warning: Some("invalid_folder"),
+                },
+            )),
+        },
+        None => String::new(),
+    };
+
     let pages = crate::read_pages();
     let csrf = crate::ensure_csrf(jar);
-    let pictures = list_static_assets(STATIC_PICTURES_DIR, "/static/pictures", true);
+
+    let folder_path = picture_folder_fs_path(&folder);
+    if fs::create_dir_all(&folder_path).is_err() {
+        return Ok(Template::render(
+            "admin/pictures",
+            context! {
+                pages: pages,
+                csrf: csrf,
+                pictures: Vec::<AssetItem>::new(),
+                picture_folders: Vec::<PictureFolderItem>::new(),
+                all_folders: vec![String::new()],
+                current_folder: folder,
+                current_folder_label: String::from("/"),
+                current_folder_static_path: String::from("/static/pictures"),
+                warning: Some("folder_missing"),
+            },
+        ));
+    }
+
+    let pictures = list_picture_assets_for_folder(&folder);
+    let all_folders = list_picture_folders();
+    let picture_folders = all_folders
+        .iter()
+        .map(|entry| PictureFolderItem {
+            name: if entry.is_empty() {
+                "/".to_string()
+            } else {
+                entry.rsplit('/').next().unwrap_or(entry).to_string()
+            },
+            path: entry.clone(),
+            is_current: *entry == folder,
+        })
+        .collect::<Vec<_>>();
+
+    let current_folder_label = if folder.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", folder)
+    };
+    let current_folder_static_path = picture_folder_url(&folder);
+
     Ok(Template::render(
         "admin/pictures",
-        context! { pages: pages, csrf: csrf, pictures: pictures, warning: warning },
+        context! {
+            pages: pages,
+            csrf: csrf,
+            pictures: pictures,
+            picture_folders: picture_folders,
+            all_folders: all_folders,
+            current_folder: folder,
+            current_folder_label: current_folder_label,
+            current_folder_static_path: current_folder_static_path,
+            warning: warning,
+        },
     ))
 }
 
@@ -327,6 +544,7 @@ pub(crate) fn admin_update_calendar_allowed_ips(
 #[derive(FromForm)]
 pub(crate) struct UploadForm<'r> {
     upload: TempFile<'r>,
+    target_folder: Option<String>,
     csrf: Option<String>,
 }
 
@@ -390,14 +608,22 @@ pub(crate) async fn admin_upload_picture(jar: &CookieJar<'_>, form: Form<UploadF
     if let Some(form_csrf) = f.csrf.as_ref() {
         if let Some(cookie_csrf) = jar.get_private("csrf") {
             if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin");
+                return redirect_admin_pictures("", Some("invalid_csrf"));
             }
         } else {
-            return Redirect::to("/admin");
+            return redirect_admin_pictures("", Some("invalid_csrf"));
         }
     } else {
-        return Redirect::to("/admin");
+        return redirect_admin_pictures("", Some("invalid_csrf"));
     }
+
+    let folder = match f.target_folder.as_deref() {
+        Some(value) if !value.trim().is_empty() => match normalize_picture_folder(value) {
+            Some(v) => v,
+            None => return redirect_admin_pictures("", Some("invalid_folder")),
+        },
+        _ => String::new(),
+    };
 
     let incoming = f
         .upload
@@ -423,7 +649,7 @@ pub(crate) async fn admin_upload_picture(jar: &CookieJar<'_>, form: Form<UploadF
         .to_ascii_lowercase();
     let is_image_content = content_type.starts_with("image/");
     if !is_image_content {
-        return Redirect::to("/admin");
+        return redirect_admin_pictures(&folder, Some("invalid_picture_type"));
     }
 
     if !is_allowed_picture_filename(&filename)
@@ -449,18 +675,166 @@ pub(crate) async fn admin_upload_picture(jar: &CookieJar<'_>, form: Form<UploadF
         filename = format!("{}.{}", filename, ext);
     }
 
-    if fs::create_dir_all(STATIC_PICTURES_DIR).is_err() {
-        return Redirect::to("/admin");
+    let target_dir = picture_folder_fs_path(&folder);
+    if fs::create_dir_all(&target_dir).is_err() {
+        return redirect_admin_pictures(&folder, Some("folder_create_failed"));
     }
-    let target = unique_upload_path(Path::new(STATIC_PICTURES_DIR), &filename);
+    let target = unique_upload_path(&target_dir, &filename);
     if f.upload.persist_to(&target).await.is_err() {
-        return Redirect::to("/admin");
+        return redirect_admin_pictures(&folder, Some("upload_failed"));
     }
 
     if sanitized_changed {
-        Redirect::to("/admin?warning=filename_sanitized")
+        redirect_admin_pictures(&folder, Some("filename_sanitized"))
     } else {
-        Redirect::to("/admin")
+        redirect_admin_pictures(&folder, None)
+    }
+}
+
+#[derive(FromForm)]
+pub(crate) struct CreatePictureFolderForm {
+    parent_folder: Option<String>,
+    folder_name: String,
+    csrf: Option<String>,
+}
+
+#[post("/admin/pictures/folder/create", data = "<form>")]
+pub(crate) fn admin_create_picture_folder(
+    jar: &CookieJar<'_>,
+    form: Form<CreatePictureFolderForm>,
+) -> Redirect {
+    if !crate::is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+
+    let f = form.into_inner();
+    if let Some(form_csrf) = f.csrf.as_ref() {
+        if let Some(cookie_csrf) = jar.get_private("csrf") {
+            if cookie_csrf.value() != form_csrf.as_str() {
+                return redirect_admin_pictures("", Some("invalid_csrf"));
+            }
+        } else {
+            return redirect_admin_pictures("", Some("invalid_csrf"));
+        }
+    } else {
+        return redirect_admin_pictures("", Some("invalid_csrf"));
+    }
+
+    let parent = match f.parent_folder.as_deref() {
+        Some(value) if !value.trim().is_empty() => match normalize_picture_folder(value) {
+            Some(v) => v,
+            None => return redirect_admin_pictures("", Some("invalid_folder")),
+        },
+        _ => String::new(),
+    };
+
+    let folder_name_original = f.folder_name.trim();
+    let folder_name = sanitize_upload_filename(folder_name_original);
+    if folder_name.is_empty() {
+        return redirect_admin_pictures(&parent, Some("invalid_folder_name"));
+    }
+    if !is_safe_folder_segment(&folder_name) {
+        return redirect_admin_pictures(&parent, Some("invalid_folder_name"));
+    }
+
+    let new_folder_rel = if parent.is_empty() {
+        folder_name.clone()
+    } else {
+        format!("{}/{}", parent, folder_name)
+    };
+    let new_folder_path = picture_folder_fs_path(&new_folder_rel);
+    if new_folder_path.exists() {
+        return redirect_admin_pictures(&new_folder_rel, Some("folder_exists"));
+    }
+
+    if fs::create_dir_all(&new_folder_path).is_err() {
+        return redirect_admin_pictures(&parent, Some("folder_create_failed"));
+    }
+
+    if folder_name != folder_name_original {
+        redirect_admin_pictures(&new_folder_rel, Some("folder_name_sanitized"))
+    } else {
+        redirect_admin_pictures(&new_folder_rel, Some("folder_created"))
+    }
+}
+
+#[derive(FromForm)]
+pub(crate) struct PictureRenameMoveForm {
+    source_path: String,
+    target_folder: Option<String>,
+    new_name: Option<String>,
+    csrf: Option<String>,
+}
+
+#[post("/admin/pictures/rename-move", data = "<form>")]
+pub(crate) fn admin_rename_move_picture(jar: &CookieJar<'_>, form: Form<PictureRenameMoveForm>) -> Redirect {
+    if !crate::is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+
+    let f = form.into_inner();
+    if let Some(form_csrf) = f.csrf.as_ref() {
+        if let Some(cookie_csrf) = jar.get_private("csrf") {
+            if cookie_csrf.value() != form_csrf.as_str() {
+                return redirect_admin_pictures("", Some("invalid_csrf"));
+            }
+        } else {
+            return redirect_admin_pictures("", Some("invalid_csrf"));
+        }
+    } else {
+        return redirect_admin_pictures("", Some("invalid_csrf"));
+    }
+
+    let source_rel = match normalize_picture_folder(&f.source_path) {
+        Some(v) if !v.is_empty() => v,
+        _ => return redirect_admin_pictures("", Some("invalid_picture_operation")),
+    };
+    let source_file_name = source_rel.rsplit('/').next().unwrap_or("image.bin");
+    let source_folder = source_rel
+        .rsplit_once('/')
+        .map(|(folder, _)| folder.to_string())
+        .unwrap_or_default();
+
+    let target_folder = match f.target_folder.as_deref() {
+        Some(value) if !value.trim().is_empty() => match normalize_picture_folder(value) {
+            Some(v) => v,
+            None => return redirect_admin_pictures(&source_folder, Some("invalid_folder")),
+        },
+        _ => source_folder.clone(),
+    };
+
+    let requested_name = f.new_name.unwrap_or_default();
+    let sanitized_name = if requested_name.trim().is_empty() {
+        source_file_name.to_string()
+    } else {
+        sanitize_upload_filename(requested_name.trim())
+    };
+    if sanitized_name.is_empty() {
+        return redirect_admin_pictures(&source_folder, Some("invalid_picture_name"));
+    }
+    if !is_allowed_picture_filename(&sanitized_name) {
+        return redirect_admin_pictures(&source_folder, Some("invalid_picture_name"));
+    }
+
+    let source_path = picture_folder_fs_path(&source_rel);
+    if !source_path.is_file() {
+        return redirect_admin_pictures(&source_folder, Some("picture_not_found"));
+    }
+
+    let target_dir = picture_folder_fs_path(&target_folder);
+    if fs::create_dir_all(&target_dir).is_err() {
+        return redirect_admin_pictures(&source_folder, Some("folder_create_failed"));
+    }
+
+    let destination = unique_upload_path(&target_dir, &sanitized_name);
+    if fs::rename(&source_path, &destination).is_err() {
+        return redirect_admin_pictures(&source_folder, Some("rename_move_failed"));
+    }
+
+    if sanitized_name != requested_name.trim() {
+        redirect_admin_pictures(&target_folder, Some("filename_sanitized"))
+    } else {
+        redirect_admin_pictures(&target_folder, Some("picture_renamed_moved"))
     }
 }
 

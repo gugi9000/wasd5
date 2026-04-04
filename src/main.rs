@@ -27,11 +27,12 @@ mod schema;
 mod calendar;
 mod admin;
 use admin::{
-    admin_calendar_settings_get, admin_edit_page_get, admin_edit_page_post, admin_files_get,
-    admin_index, admin_landing_get, admin_landing_post, admin_login_get, admin_login_post,
-    admin_logout, admin_pages_new_get, admin_pages_new_post, admin_pictures_get,
+    admin_calendar_settings_get, admin_create_picture_folder, admin_edit_page_get,
+    admin_edit_page_post, admin_files_get, admin_index, admin_landing_get, admin_landing_post,
+    admin_login_get, admin_login_post, admin_logout, admin_pages_new_get, admin_pages_new_post,
+    admin_pictures_get, admin_rename_move_picture, admin_update_calendar_allowed_ips,
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
-    admin_update_calendar_allowed_ips, create_user, list_users,
+    create_user, list_users,
 };
 use calendar::{
     api_calendar_access, api_calendar_create, api_calendar_delete, api_calendar_get,
@@ -438,6 +439,8 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_landing_post,
                 admin_upload_file,
                 admin_upload_picture,
+                admin_create_picture_folder,
+                admin_rename_move_picture,
                 admin_update_calendar_allowed_ips,
                 ip,
                 page_root,

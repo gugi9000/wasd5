@@ -10,21 +10,113 @@
   </nav>
 
   <h2>Pictures</h2>
-  <p class="text-muted">Upload and manage images. Uploaded pictures are stored in <code>/static/pictures</code>.</p>
+  <p class="text-muted">Upload and manage images. Uploaded pictures are stored in <code>{{ current_folder_static_path }}</code>.</p>
 
   {% if warning == "filename_sanitized" %}
     <div class="alert alert-warning" role="alert">
       Filename was sanitized before saving (spaces and special characters may have been replaced).
     </div>
+  {% elif warning == "folder_created" %}
+    <div class="alert alert-success" role="alert">
+      Folder created.
+    </div>
+  {% elif warning == "folder_name_sanitized" %}
+    <div class="alert alert-warning" role="alert">
+      Folder name was sanitized before creation.
+    </div>
+  {% elif warning == "folder_exists" %}
+    <div class="alert alert-warning" role="alert">
+      Folder already exists.
+    </div>
+  {% elif warning == "invalid_folder" or warning == "invalid_folder_name" %}
+    <div class="alert alert-danger" role="alert">
+      Invalid folder path or name.
+    </div>
+  {% elif warning == "invalid_picture_name" or warning == "invalid_picture_type" %}
+    <div class="alert alert-danger" role="alert">
+      Invalid picture name or format.
+    </div>
+  {% elif warning == "picture_not_found" %}
+    <div class="alert alert-danger" role="alert">
+      The selected picture no longer exists.
+    </div>
+  {% elif warning == "picture_renamed_moved" %}
+    <div class="alert alert-success" role="alert">
+      Picture renamed or moved.
+    </div>
+  {% elif warning == "rename_move_failed" or warning == "upload_failed" or warning == "folder_create_failed" %}
+    <div class="alert alert-danger" role="alert">
+      The operation failed. Please try again.
+    </div>
   {% endif %}
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Browse folders</h5>
+      <p class="text-muted mb-3">Current folder: <code>{{ current_folder_label }}</code></p>
+      <div class="d-flex flex-wrap gap-2">
+        {% for folder in picture_folders %}
+          {% if folder.is_current %}
+            <span class="badge text-bg-primary">{{ folder.path | default(value="/") }}</span>
+          {% else %}
+            {% if folder.path == "" %}
+              <a class="btn btn-sm btn-outline-secondary" href="/admin/pictures">/</a>
+            {% else %}
+              <a class="btn btn-sm btn-outline-secondary" href="/admin/pictures?folder={{ folder.path }}">{{ folder.path }}</a>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Create subfolder</h5>
+      <form method="post" action="/admin/pictures/folder/create" class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label" for="folder-parent">Parent folder</label>
+          <select id="folder-parent" class="form-select" name="parent_folder">
+            {% for folder in all_folders %}
+              {% if folder == current_folder %}
+                <option value="{{ folder }}" selected>{{ folder | default(value="/") }}</option>
+              {% else %}
+                <option value="{{ folder }}">{{ folder | default(value="/") }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label" for="folder-name">Folder name</label>
+          <input id="folder-name" class="form-control" type="text" name="folder_name" placeholder="e.g. products" required />
+        </div>
+        <div class="col-md-3 d-grid">
+          <input type="hidden" name="csrf" value="{{ csrf }}" />
+          <button class="btn btn-outline-primary" type="submit">Create folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <form method="post" action="/admin/upload/picture" enctype="multipart/form-data" class="mb-5">
     <div class="mb-2">
       <label class="form-label" for="upload-picture">Upload picture</label>
       <input id="upload-picture" class="form-control" type="file" name="upload" accept="image/*" required />
+    </div>
+    <div class="mb-2">
+      <label class="form-label" for="upload-folder">Upload folder</label>
+      <select id="upload-folder" class="form-select" name="target_folder">
+        {% for folder in all_folders %}
+          {% if folder == current_folder %}
+            <option value="{{ folder }}" selected>{{ folder | default(value="/") }}</option>
+          {% else %}
+            <option value="{{ folder }}">{{ folder | default(value="/") }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
       <input type="hidden" name="csrf" value="{{ csrf }}" />
     </div>
-    <button class="btn btn-primary" type="submit">Upload to pictures</button>
+    <button class="btn btn-primary" type="submit">Upload picture</button>
   </form>
 
   <h4>Uploaded pictures</h4>
@@ -38,6 +130,7 @@
             <th>Picture</th>
             <th>Direct URL</th>
             <th>Markdown</th>
+            <th>Rename / Move</th>
           </tr>
         </thead>
         <tbody>
@@ -65,6 +158,29 @@
                   <input class="form-control" readonly value="{{ item.markdown }}" />
                   <button type="button" class="btn btn-outline-secondary copy-btn" data-copy="{{ item.markdown }}">Copy</button>
                 </div>
+              </td>
+              <td style="min-width: 300px;">
+                <form method="post" action="/admin/pictures/rename-move" class="row g-1 align-items-center">
+                  <input type="hidden" name="source_path" value="{{ item.rel_path }}" />
+                  <input type="hidden" name="csrf" value="{{ csrf }}" />
+                  <div class="col-12">
+                    <input class="form-control form-control-sm" type="text" name="new_name" value="{{ item.name }}" />
+                  </div>
+                  <div class="col-8">
+                    <select class="form-select form-select-sm" name="target_folder">
+                      {% for folder in all_folders %}
+                        {% if folder == current_folder %}
+                          <option value="{{ folder }}" selected>{{ folder | default(value="/") }}</option>
+                        {% else %}
+                          <option value="{{ folder }}">{{ folder | default(value="/") }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-4 d-grid">
+                    <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                  </div>
+                </form>
               </td>
             </tr>
           {% endfor %}
