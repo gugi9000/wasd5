@@ -27,8 +27,9 @@ mod schema;
 mod calendar;
 mod admin;
 use admin::{
-    admin_edit_page_get, admin_edit_page_post, admin_index, admin_landing_get, admin_landing_post,
-    admin_login_get, admin_login_post, admin_logout, admin_pages_new_get, admin_pages_new_post,
+    admin_calendar_settings_get, admin_edit_page_get, admin_edit_page_post, admin_files_get,
+    admin_index, admin_landing_get, admin_landing_post, admin_login_get, admin_login_post,
+    admin_logout, admin_pages_new_get, admin_pages_new_post, admin_pictures_get,
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
     admin_update_calendar_allowed_ips, create_user, list_users,
 };
@@ -453,6 +454,9 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_users_create,
                 admin_edit_page_get,
                 admin_edit_page_post,
+                admin_files_get,
+                admin_pictures_get,
+                admin_calendar_settings_get,
                 admin_pages_new_get,
                 admin_pages_new_post,
                 calendar_index,

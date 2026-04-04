@@ -181,10 +181,21 @@ pub(crate) fn admin_logout(jar: &CookieJar) -> Redirect {
     Redirect::to("/admin/login")
 }
 
-#[get("/admin?<warning>")]
-pub(crate) fn admin_index(
+#[get("/admin")]
+pub(crate) fn admin_index(jar: &CookieJar) -> Result<Template, Redirect> {
+    if !crate::is_admin_cookie(jar) {
+        return Err(Redirect::to("/admin/login"));
+    }
+    let pages = crate::read_pages();
+    Ok(Template::render(
+        "admin/index",
+        context! { pages: pages },
+    ))
+}
+
+#[get("/admin/files?<warning>")]
+pub(crate) fn admin_files_get(
     jar: &CookieJar,
-    pool: &State<DbPool>,
     warning: Option<&str>,
 ) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
@@ -193,7 +204,39 @@ pub(crate) fn admin_index(
     let pages = crate::read_pages();
     let csrf = crate::ensure_csrf(jar);
     let files = list_static_assets(STATIC_FILES_DIR, "/static/files", false);
+    Ok(Template::render(
+        "admin/files",
+        context! { pages: pages, csrf: csrf, files: files, warning: warning },
+    ))
+}
+
+#[get("/admin/pictures?<warning>")]
+pub(crate) fn admin_pictures_get(
+    jar: &CookieJar,
+    warning: Option<&str>,
+) -> Result<Template, Redirect> {
+    if !crate::is_admin_cookie(jar) {
+        return Err(Redirect::to("/admin/login"));
+    }
+    let pages = crate::read_pages();
+    let csrf = crate::ensure_csrf(jar);
     let pictures = list_static_assets(STATIC_PICTURES_DIR, "/static/pictures", true);
+    Ok(Template::render(
+        "admin/pictures",
+        context! { pages: pages, csrf: csrf, pictures: pictures, warning: warning },
+    ))
+}
+
+#[get("/admin/calendar")]
+pub(crate) fn admin_calendar_settings_get(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+) -> Result<Template, Redirect> {
+    if !crate::is_admin_cookie(jar) {
+        return Err(Redirect::to("/admin/login"));
+    }
+    let pages = crate::read_pages();
+    let csrf = crate::ensure_csrf(jar);
     use crate::schema::calendar_allowed_ips::dsl as aid;
     let calendar_allowed_ips_text = if let Ok(mut conn) = pool.get() {
         aid::calendar_allowed_ips
@@ -210,15 +253,8 @@ pub(crate) fn admin_index(
         String::new()
     };
     Ok(Template::render(
-        "admin/index",
-        context! {
-            pages: pages,
-            csrf: csrf,
-            files: files,
-            pictures: pictures,
-            warning: warning,
-            calendar_allowed_ips_text: calendar_allowed_ips_text
-        },
+        "admin/calendar_settings",
+        context! { pages: pages, csrf: csrf, calendar_allowed_ips_text: calendar_allowed_ips_text },
     ))
 }
 
@@ -242,13 +278,13 @@ pub(crate) fn admin_update_calendar_allowed_ips(
     if let Some(form_csrf) = f.csrf.as_ref() {
         if let Some(cookie_csrf) = jar.get_private("csrf") {
             if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin");
+                return Redirect::to("/admin/calendar");
             }
         } else {
-            return Redirect::to("/admin");
+            return Redirect::to("/admin/calendar");
         }
     } else {
-        return Redirect::to("/admin");
+        return Redirect::to("/admin/calendar");
     }
 
     let mut parsed: Vec<String> = Vec::new();
@@ -285,7 +321,7 @@ pub(crate) fn admin_update_calendar_allowed_ips(
         }
     }
 
-    Redirect::to("/admin")
+    Redirect::to("/admin/calendar")
 }
 
 #[derive(FromForm)]
@@ -304,13 +340,13 @@ pub(crate) async fn admin_upload_file(jar: &CookieJar<'_>, form: Form<UploadForm
     if let Some(form_csrf) = f.csrf.as_ref() {
         if let Some(cookie_csrf) = jar.get_private("csrf") {
             if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin");
+                return Redirect::to("/admin/files");
             }
         } else {
-            return Redirect::to("/admin");
+            return Redirect::to("/admin/files");
         }
     } else {
-        return Redirect::to("/admin");
+        return Redirect::to("/admin/files");
     }
 
     let incoming = f
@@ -330,17 +366,17 @@ pub(crate) async fn admin_upload_file(jar: &CookieJar<'_>, form: Form<UploadForm
     }
 
     if fs::create_dir_all(STATIC_FILES_DIR).is_err() {
-        return Redirect::to("/admin");
+        return Redirect::to("/admin/files");
     }
     let target = unique_upload_path(Path::new(STATIC_FILES_DIR), &filename);
     if f.upload.persist_to(&target).await.is_err() {
-        return Redirect::to("/admin");
+        return Redirect::to("/admin/files");
     }
 
     if sanitized_changed {
-        Redirect::to("/admin?warning=filename_sanitized")
+        Redirect::to("/admin/files?warning=filename_sanitized")
     } else {
-        Redirect::to("/admin")
+        Redirect::to("/admin/files")
     }
 }
 
