@@ -1,0 +1,25 @@
+{% extends "base" %}
+{% block title %}Calendar Settings — Admin{% endblock title %}
+{% block content %}
+<div class="container py-5">
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="/admin">Admin</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Calendar Settings</li>
+    </ol>
+  </nav>
+
+  <h2>Calendar Settings</h2>
+
+  <h4>Allowed IP addresses</h4>
+  <p class="text-muted">Enter one IP per line (IPv4 or IPv6). Users from these addresses can access <a href="/calendar">/calendar</a> without admin login.</p>
+  <form method="post" action="/admin/calendar/allowed-ips" class="mb-4">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <div class="mb-2">
+      <label class="form-label" for="allowed-ips">Allowed IP addresses</label>
+      <textarea id="allowed-ips" class="form-control" name="allowed_ips" rows="8" placeholder="203.0.113.10&#10;2001:db8::1">{{ calendar_allowed_ips_text }}</textarea>
+    </div>
+    <button class="btn btn-primary" type="submit">Save allowed IPs</button>
+  </form>
+</div>
+{% endblock content %}
