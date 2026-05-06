@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
                 password_hash: &pw_hash,
                 role: &role_val,
                 created_at: chrono::Utc::now().timestamp(),
+                email: None,
             };
             let mut conn = pool.get()?;
             diesel::insert_into(users).values(&new).execute(&mut conn)?;

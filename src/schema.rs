@@ -8,6 +8,7 @@ diesel::table! {
         password_hash -> Text,
         role -> Text,
         created_at -> BigInt,
+        email -> Nullable<Text>,
     }
 }
 

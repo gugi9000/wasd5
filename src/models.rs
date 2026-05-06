@@ -13,6 +13,7 @@ pub struct User {
     pub password_hash: String,
     pub role: String,
     pub created_at: i64,
+    pub email: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -22,6 +23,7 @@ pub struct NewUser<'a> {
     pub password_hash: &'a str,
     pub role: &'a str,
     pub created_at: i64,
+    pub email: Option<&'a str>,
 }
 
 #[derive(Queryable, Identifiable, Serialize, Debug, Clone)]

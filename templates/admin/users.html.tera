@@ -1,20 +1,57 @@
 {% extends "base" %}
 {% block content %}
-<div class="container py-5">
-  <h2>Users</h2>
-  {% if error %}
-  <div class="alert alert-danger">{{ error }}</div>
-  {% endif %}
-  <p><a class="btn btn-sm btn-primary" href="/admin/users/new">Create user</a></p>
-  <table class="table table-striped">
-    <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Created</th></tr></thead>
+<h2 class="mb-4">Users</h2>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<p><a class="btn btn-sm btn-primary" href="/admin/users/new">Create user</a></p>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th style="width:2rem">ID</th>
+        <th>Username</th>
+        <th>Email</th>
+        <th style="width:8rem">Role</th>
+        <th style="width:11rem">Created</th>
+        <th style="width:5rem"></th>
+      </tr>
+    </thead>
     <tbody>
     {% for u in users %}
+      {# Hidden form — inputs reference it via the form="…" attribute #}
+      <form id="uf-{{ u.id }}"
+            method="post"
+            action="/admin/users/{{ u.id }}/update"
+            style="display:none">
+        <input type="hidden" name="csrf" value="{{ csrf }}" />
+      </form>
       <tr>
-        <td>{{ u.id }}</td>
-        <td>{{ u.username }}</td>
-        <td>{{ u.role }}</td>
-        <td>{{ u.created_at }}</td>
+        <td class="text-muted small">{{ u.id }}</td>
+        <td class="fw-semibold">{{ u.username }}</td>
+        <td>
+          <input type="email"
+                 name="email"
+                 form="uf-{{ u.id }}"
+                 value="{{ u.email | default(value='') }}"
+                 class="form-control form-control-sm"
+                 placeholder="—" />
+        </td>
+        <td>
+          <select name="role" form="uf-{{ u.id }}" class="form-select form-select-sm">
+            <option value="member"{% if u.role == "member" %} selected{% endif %}>member</option>
+            <option value="admin"{% if u.role == "admin" %} selected{% endif %}>admin</option>
+          </select>
+        </td>
+        <td class="small text-muted text-nowrap">{{ u.created_at_str }}</td>
+        <td>
+          <button type="submit"
+                  form="uf-{{ u.id }}"
+                  class="btn btn-sm btn-outline-primary">Save</button>
+        </td>
       </tr>
     {% endfor %}
     </tbody>

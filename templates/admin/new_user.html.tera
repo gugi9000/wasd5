@@ -12,6 +12,10 @@
       <input name="password" type="password" class="form-control" />
     </div>
     <div class="mb-3">
+      <label class="form-label">Email <span class="text-muted fw-normal small">(optional)</span></label>
+      <input name="email" type="email" class="form-control" placeholder="user@example.com" />
+    </div>
+    <div class="mb-3">
       <label class="form-label">Role</label>
       <select name="role" class="form-select">
         <option value="member">member</option>

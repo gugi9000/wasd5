@@ -20,28 +20,27 @@ use rocket_dyn_templates::{Template, context};
 use serde::Serialize;
 use uuid::Uuid;
 
+mod admin;
+mod calendar;
 mod db;
 mod helpers;
 mod models;
-mod schema;
-mod calendar;
-mod admin;
 mod packages;
+mod schema;
 use admin::{
     admin_calendar_settings_get, admin_create_picture_folder, admin_edit_page_get,
     admin_edit_page_post, admin_files_get, admin_index, admin_landing_get, admin_landing_post,
     admin_login_get, admin_login_post, admin_logout, admin_pages_new_get, admin_pages_new_post,
     admin_pictures_get, admin_rename_move_picture, admin_update_calendar_allowed_ips,
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
-    create_user, list_users,
+    admin_users_update, create_user, list_users,
 };
-use packages::{create_package, delete_package, list_packages, mark_received};
 use calendar::{
     api_calendar_access, api_calendar_create, api_calendar_delete, api_calendar_get,
-    api_calendar_update,
-    calendar_index,
+    api_calendar_update, calendar_index,
 };
 use helpers::format_modified;
+use packages::{create_package, delete_package, list_packages, mark_received};
 
 pub(crate) const PAGES_DIR: &str = "pages";
 const STATIC_DIR: &str = "static";
@@ -224,13 +223,11 @@ impl<'r> FromRequest<'r> for RemoteAddr {
     }
 }
 
-
 #[get("/ip")]
 fn ip(req: RemoteAddr) -> String {
     let remote_ip = req.addr();
     format!("{}\n", remote_ip)
 }
-
 
 fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template>> {
     let mut path = PathBuf::from(PAGES_DIR);
@@ -338,9 +335,7 @@ fn page_root(jar: &CookieJar) -> Result<Template, NotFound<Template>> {
         "folder",
         context! { folder: "", folder_name: "Home", pages: all_pages, items: items, can_edit: can_edit },
     ))
-
 }
-
 
 #[get("/page/<path..>")]
 fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, NotFound<Template>> {
@@ -369,7 +364,11 @@ fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, Not
         collect_pages(&folder_path, &PathBuf::from(PAGES_DIR), &mut folder_pages);
         folder_pages.sort_by(|a, b| b.modified.cmp(&a.modified));
         let items = listings_to_items(&folder_pages);
-        let folder_name = slug.split('/').last().unwrap_or(slug.as_str()).replace('-', " ");
+        let folder_name = slug
+            .split('/')
+            .last()
+            .unwrap_or(slug.as_str())
+            .replace('-', " ");
         let pages = read_pages();
         return Ok(Template::render(
             "folder",
@@ -457,6 +456,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_users,
                 admin_users_new,
                 admin_users_create,
+                admin_users_update,
                 admin_edit_page_get,
                 admin_edit_page_post,
                 admin_files_get,

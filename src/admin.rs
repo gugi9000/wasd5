@@ -331,10 +331,7 @@ pub(crate) fn admin_index(jar: &CookieJar) -> Result<Template, Redirect> {
         return Err(Redirect::to("/admin/login"));
     }
     let pages = crate::read_pages();
-    Ok(Template::render(
-        "admin/index",
-        context! { pages: pages },
-    ))
+    Ok(Template::render("admin/index", context! { pages: pages }))
 }
 
 #[get("/admin/files?<warning>")]
@@ -367,20 +364,22 @@ pub(crate) fn admin_pictures_get(
     let folder = match folder {
         Some(value) => match normalize_picture_folder(value) {
             Some(v) => v,
-            None => return Ok(Template::render(
-                "admin/pictures",
-                context! {
-                    pages: crate::read_pages(),
-                    csrf: crate::ensure_csrf(jar),
-                    pictures: Vec::<AssetItem>::new(),
-                    picture_folders: Vec::<PictureFolderItem>::new(),
-                    all_folders: vec![String::new()],
-                    current_folder: String::new(),
-                    current_folder_label: String::from("/"),
-                    current_folder_static_path: String::from("/static/pictures"),
-                    warning: Some("invalid_folder"),
-                },
-            )),
+            None => {
+                return Ok(Template::render(
+                    "admin/pictures",
+                    context! {
+                        pages: crate::read_pages(),
+                        csrf: crate::ensure_csrf(jar),
+                        pictures: Vec::<AssetItem>::new(),
+                        picture_folders: Vec::<PictureFolderItem>::new(),
+                        all_folders: vec![String::new()],
+                        current_folder: String::new(),
+                        current_folder_label: String::from("/"),
+                        current_folder_static_path: String::from("/static/pictures"),
+                        warning: Some("invalid_folder"),
+                    },
+                ));
+            }
         },
         None => String::new(),
     };
@@ -515,7 +514,7 @@ pub(crate) fn admin_update_calendar_allowed_ips(
         }
         if !ip
             .chars()
-            .all(|c| c.is_ascii_hexdigit() || c == '.' || c == ':' )
+            .all(|c| c.is_ascii_hexdigit() || c == '.' || c == ':')
         {
             continue;
         }
@@ -599,7 +598,10 @@ pub(crate) async fn admin_upload_file(jar: &CookieJar<'_>, form: Form<UploadForm
 }
 
 #[post("/admin/upload/picture", data = "<form>")]
-pub(crate) async fn admin_upload_picture(jar: &CookieJar<'_>, form: Form<UploadForm<'_>>) -> Redirect {
+pub(crate) async fn admin_upload_picture(
+    jar: &CookieJar<'_>,
+    form: Form<UploadForm<'_>>,
+) -> Redirect {
     if !crate::is_admin_cookie(jar) {
         return Redirect::to("/admin/login");
     }
@@ -767,7 +769,10 @@ pub(crate) struct PictureRenameMoveForm {
 }
 
 #[post("/admin/pictures/rename-move", data = "<form>")]
-pub(crate) fn admin_rename_move_picture(jar: &CookieJar<'_>, form: Form<PictureRenameMoveForm>) -> Redirect {
+pub(crate) fn admin_rename_move_picture(
+    jar: &CookieJar<'_>,
+    form: Form<PictureRenameMoveForm>,
+) -> Redirect {
     if !crate::is_admin_cookie(jar) {
         return Redirect::to("/admin/login");
     }
@@ -838,6 +843,15 @@ pub(crate) fn admin_rename_move_picture(jar: &CookieJar<'_>, form: Form<PictureR
     }
 }
 
+#[derive(Serialize)]
+struct UserDisplay {
+    id: i32,
+    username: String,
+    email: Option<String>,
+    role: String,
+    created_at_str: String,
+}
+
 #[get("/admin/users")]
 pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
@@ -849,7 +863,7 @@ pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Templ
         Err(_) => {
             return Ok(Template::render(
                 "admin/users",
-                context! { error: "DB unavailable", users: Vec::<models::User>::new() },
+                context! { error: "DB unavailable", users: Vec::<UserDisplay>::new() },
             ));
         }
     };
@@ -857,10 +871,29 @@ pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Templ
         .order(created_at.desc())
         .load::<models::User>(&mut conn)
         .unwrap_or_default();
+    let display: Vec<UserDisplay> = results
+        .into_iter()
+        .map(|u| {
+            use chrono::TimeZone;
+            let created_at_str = Utc
+                .timestamp_opt(u.created_at, 0)
+                .single()
+                .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                .unwrap_or_default();
+            UserDisplay {
+                id: u.id,
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                created_at_str,
+            }
+        })
+        .collect();
     let pages = crate::read_pages();
+    let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/users",
-        context! { users: results, pages: pages },
+        context! { users: display, pages: pages, csrf: csrf },
     ))
 }
 
@@ -878,15 +911,56 @@ pub(crate) fn admin_users_new(jar: &CookieJar) -> Result<Template, Redirect> {
 }
 
 #[derive(FromForm)]
+pub(crate) struct UpdateUserForm {
+    email: Option<String>,
+    role: String,
+    csrf: String,
+}
+
+#[post("/admin/users/<user_id>/update", data = "<form>")]
+pub(crate) fn admin_users_update(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    user_id: i32,
+    form: Form<UpdateUserForm>,
+) -> Redirect {
+    if !crate::is_admin_cookie(jar) {
+        return Redirect::to("/admin/login");
+    }
+    let f = form.into_inner();
+    if let Some(cookie_csrf) = jar.get_private("csrf") {
+        if cookie_csrf.value() != f.csrf.as_str() {
+            return Redirect::to("/admin/users");
+        }
+    } else {
+        return Redirect::to("/admin/users");
+    }
+    let role_val = if f.role == "admin" { "admin" } else { "member" };
+    let email_val: Option<String> = f.email.filter(|s| !s.trim().is_empty());
+    use crate::schema::users::dsl::{email, id, role, users};
+    if let Ok(mut conn) = pool.get() {
+        let _ = diesel::update(users.filter(id.eq(user_id)))
+            .set((email.eq(email_val), role.eq(role_val)))
+            .execute(&mut conn);
+    }
+    Redirect::to("/admin/users")
+}
+
+#[derive(FromForm)]
 pub(crate) struct NewUserForm {
     username: String,
     password: String,
     role: Option<String>,
+    email: Option<String>,
     csrf: Option<String>,
 }
 
 #[post("/admin/users", data = "<form>")]
-pub(crate) fn admin_users_create(jar: &CookieJar, pool: &State<DbPool>, form: Form<NewUserForm>) -> Redirect {
+pub(crate) fn admin_users_create(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    form: Form<NewUserForm>,
+) -> Redirect {
     if !crate::is_admin_cookie(jar) {
         return Redirect::to("/admin/login");
     }
@@ -906,11 +980,13 @@ pub(crate) fn admin_users_create(jar: &CookieJar, pool: &State<DbPool>, form: Fo
 
     let role_val = f.role.unwrap_or_else(|| "member".to_string());
     let pw_hash = hash(&f.password, DEFAULT_COST).unwrap_or_else(|_| "".to_string());
+    let email_val = f.email.as_deref().filter(|s| !s.is_empty());
     let new = models::NewUser {
         username: f.username.as_str(),
         password_hash: pw_hash.as_str(),
         role: role_val.as_str(),
         created_at: Utc::now().timestamp(),
+        email: email_val,
     };
     if let Ok(mut conn) = pool.get() {
         let _ = diesel::insert_into(users).values(&new).execute(&mut conn);
@@ -1051,7 +1127,10 @@ pub(crate) struct EditPageForm {
 }
 
 #[get("/admin/pages/edit/<path..>")]
-pub(crate) fn admin_edit_page_get(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, Redirect> {
+pub(crate) fn admin_edit_page_get(
+    path: std::path::PathBuf,
+    jar: &CookieJar,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
@@ -1135,6 +1214,7 @@ pub(crate) struct CreateUser {
     username: String,
     password: String,
     role: Option<String>,
+    email: Option<String>,
 }
 
 #[post("/api/admin/users", data = "<payload>")]
@@ -1154,6 +1234,7 @@ pub(crate) fn create_user(
         password_hash: &pw_hash,
         role: &role_val,
         created_at: Utc::now().timestamp(),
+        email: payload.email.as_deref(),
     };
 
     let mut conn = pool.get().map_err(|_| Status::ServiceUnavailable)?;
@@ -1166,7 +1247,10 @@ pub(crate) fn create_user(
 }
 
 #[get("/api/admin/users")]
-pub(crate) fn list_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Json<Vec<models::User>>, Status> {
+pub(crate) fn list_users(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+) -> Result<Json<Vec<models::User>>, Status> {
     if !crate::is_admin_cookie(jar) {
         return Err(Status::Unauthorized);
     }
