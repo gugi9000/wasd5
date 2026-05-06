@@ -1,6 +1,9 @@
-use super::schema::{calendar_allowed_ips, calendar_appointments, calendar_persons, users};
-use serde::Serialize;
+use super::schema::{
+    calendar_allowed_ips, calendar_appointments, calendar_persons, packages, users,
+};
 use diesel::prelude::*;
+use diesel::sqlite::SqliteConnection;
+use serde::Serialize;
 
 #[derive(Queryable, Identifiable, Serialize, Debug)]
 #[diesel(table_name = users)]
@@ -72,4 +75,65 @@ pub struct CalendarAllowedIp {
 pub struct NewCalendarAllowedIp<'a> {
     pub ip_address: &'a str,
     pub created_at: i64,
+}
+
+#[derive(Queryable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = packages)]
+pub struct Package {
+    pub id: i32,
+    pub name: String,
+    pub ordered_date: i64,
+    pub received_date: Option<i64>,
+    pub user_id: i32,
+    pub tracking_id: Option<String>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = packages)]
+pub struct NewPackage {
+    pub name: String,
+    pub ordered_date: i64,
+    pub user_id: i32,
+    pub tracking_id: Option<String>,
+}
+
+impl Package {
+    /// All packages for a given user, newest order date first.
+    pub fn all_for_user(conn: &mut SqliteConnection, uid: i32) -> Vec<Package> {
+        use super::schema::packages::dsl::*;
+        packages
+            .filter(user_id.eq(uid))
+            .order(ordered_date.desc())
+            .load::<Package>(conn)
+            .unwrap_or_default()
+    }
+
+    /// Insert a new package row.
+    pub fn create(conn: &mut SqliteConnection, new_pkg: NewPackage) -> diesel::QueryResult<usize> {
+        use super::schema::packages::dsl::*;
+        diesel::insert_into(packages).values(&new_pkg).execute(conn)
+    }
+
+    /// Delete a package only if it belongs to the given user.
+    pub fn delete(
+        conn: &mut SqliteConnection,
+        pkg_id: i32,
+        uid: i32,
+    ) -> diesel::QueryResult<usize> {
+        use super::schema::packages::dsl::*;
+        diesel::delete(packages.filter(id.eq(pkg_id).and(user_id.eq(uid)))).execute(conn)
+    }
+
+    /// Set `received_date` to `ts` only if the package belongs to the given user.
+    pub fn mark_received(
+        conn: &mut SqliteConnection,
+        pkg_id: i32,
+        uid: i32,
+        ts: i64,
+    ) -> diesel::QueryResult<usize> {
+        use super::schema::packages::dsl::*;
+        diesel::update(packages.filter(id.eq(pkg_id).and(user_id.eq(uid))))
+            .set(received_date.eq(Some(ts)))
+            .execute(conn)
+    }
 }

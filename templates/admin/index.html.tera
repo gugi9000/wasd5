@@ -1,41 +1,58 @@
-{% extends "base" %}
-{% block title %}Admin Dashboard{% endblock title %}
-{% block content %}
+{% extends "base" %} {% block title %}Admin Dashboard{% endblock title %} {%
+block content %}
 <div class="container py-5">
-  <h2>Admin Dashboard</h2>
+    <h2>Admin Dashboard</h2>
 
-  <div class="list-group mt-4" style="max-width: 480px;">
-    <a href="/admin/pages/new" class="list-group-item list-group-item-action">
-      <strong>Create new page</strong>
-      <div class="text-muted small">Write and publish a new markdown page</div>
-    </a>
-    <a href="/admin/landing" class="list-group-item list-group-item-action">
-      <strong>Edit landing page</strong>
-      <div class="text-muted small">Edit the homepage content</div>
-    </a>
-    <a href="/admin/users" class="list-group-item list-group-item-action">
-      <strong>Manage users</strong>
-      <div class="text-muted small">View and create user accounts</div>
-    </a>
-    <a href="/admin/files" class="list-group-item list-group-item-action">
-      <strong>Files</strong>
-      <div class="text-muted small">Upload and manage files</div>
-    </a>
-    <a href="/admin/pictures" class="list-group-item list-group-item-action">
-      <strong>Pictures</strong>
-      <div class="text-muted small">Upload and manage images</div>
-    </a>
-    <a href="/admin/calendar" class="list-group-item list-group-item-action">
-      <strong>Calendar settings</strong>
-      <div class="text-muted small">Manage calendar IP allowlist</div>
-    </a>
-    <a href="/calendar" class="list-group-item list-group-item-action">
-      <strong>Calendar</strong>
-      <div class="text-muted small">View the calendar</div>
-    </a>
-    <a href="/admin/logout" class="list-group-item list-group-item-action text-danger">
-      <strong>Logout</strong>
-    </a>
-  </div>
+    <div class="list-group mt-4" style="max-width: 480px">
+        <a
+            href="/admin/pages/new"
+            class="list-group-item list-group-item-action"
+        >
+            <strong>Create new page</strong>
+            <div class="text-muted small">
+                Write and publish a new markdown page
+            </div>
+        </a>
+        <a href="/admin/landing" class="list-group-item list-group-item-action">
+            <strong>Edit landing page</strong>
+            <div class="text-muted small">Edit the homepage content</div>
+        </a>
+        <a href="/admin/users" class="list-group-item list-group-item-action">
+            <strong>Manage users</strong>
+            <div class="text-muted small">View and create user accounts</div>
+        </a>
+        <a href="/admin/files" class="list-group-item list-group-item-action">
+            <strong>Files</strong>
+            <div class="text-muted small">Upload and manage files</div>
+        </a>
+        <a
+            href="/admin/pictures"
+            class="list-group-item list-group-item-action"
+        >
+            <strong>Pictures</strong>
+            <div class="text-muted small">Upload and manage images</div>
+        </a>
+        <a
+            href="/admin/calendar"
+            class="list-group-item list-group-item-action"
+        >
+            <strong>Calendar settings</strong>
+            <div class="text-muted small">Manage calendar IP allowlist</div>
+        </a>
+        <a href="/calendar" class="list-group-item list-group-item-action">
+            <strong>Calendar</strong>
+            <div class="text-muted small">View the calendar</div>
+        </a>
+        <a href="/packages" class="list-group-item list-group-item-action">
+            <strong>Packages</strong>
+            <div class="text-muted small">Manage packages</div>
+        </a>
+        <a
+            href="/admin/logout"
+            class="list-group-item list-group-item-action text-danger"
+        >
+            <strong>Logout</strong>
+        </a>
+    </div>
 </div>
 {% endblock content %}

@@ -26,6 +26,7 @@ mod models;
 mod schema;
 mod calendar;
 mod admin;
+mod packages;
 use admin::{
     admin_calendar_settings_get, admin_create_picture_folder, admin_edit_page_get,
     admin_edit_page_post, admin_files_get, admin_index, admin_landing_get, admin_landing_post,
@@ -34,6 +35,7 @@ use admin::{
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
     create_user, list_users,
 };
+use packages::{create_package, delete_package, list_packages, mark_received};
 use calendar::{
     api_calendar_access, api_calendar_create, api_calendar_delete, api_calendar_get,
     api_calendar_update,
@@ -467,7 +469,11 @@ async fn main() -> Result<(), rocket::Error> {
                 api_calendar_get,
                 api_calendar_create,
                 api_calendar_update,
-                api_calendar_delete
+                api_calendar_delete,
+                list_packages,
+                create_package,
+                delete_package,
+                mark_received
             ],
         )
         .mount("/static", FileServer::from(STATIC_DIR))

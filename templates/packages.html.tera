@@ -1,0 +1,118 @@
+{% extends "base" %}
+{% block title %}Packages{% endblock title %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">📦 My Packages</h2>
+  <span class="text-muted small">{{ username }}</span>
+</div>
+
+{# ── Add-package form ─────────────────────────────────────────────────────── #}
+<div class="card mb-4 p-3">
+  <h5 class="mb-3">Add a package</h5>
+  <form method="post" action="/packages/new">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label mb-1 small fw-semibold">Description</label>
+        <input
+          name="name"
+          class="form-control form-control-sm"
+          placeholder="e.g. New keyboard"
+          required
+        />
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1 small fw-semibold">Tracking ID <span class="text-muted fw-normal">(optional)</span></label>
+        <input
+          name="tracking_id"
+          class="form-control form-control-sm"
+          placeholder="e.g. 1Z999AA1…"
+        />
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1 small fw-semibold">Order date</label>
+        <input
+          name="ordered_date"
+          type="date"
+          class="form-control form-control-sm"
+          value="{{ today }}"
+          required
+        />
+      </div>
+      <div class="col-12 col-md-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100">Add</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{# ── Package list ─────────────────────────────────────────────────────────── #}
+{% if items | length == 0 %}
+<p class="text-muted">No packages yet. Add one above!</p>
+{% else %}
+<div class="table-responsive">
+  <table class="table table-hover align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Description</th>
+        <th>Tracking ID</th>
+        <th>Ordered</th>
+        <th>Status</th>
+        <th class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="fw-semibold">{{ item.name }}</td>
+        <td>
+          {% if item.tracking_id %}
+            <code class="small">{{ item.tracking_id }}</code>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="small">{{ item.ordered_date_str }}</td>
+        <td>
+          {% if item.received_date_str %}
+            <span class="badge text-bg-success">
+              Received {{ item.received_date_str }}
+            </span>
+          {% else %}
+            <span class="badge text-bg-warning text-dark">Pending</span>
+          {% endif %}
+        </td>
+        <td class="text-end">
+          <div class="d-flex gap-2 justify-content-end flex-wrap">
+            {# Mark received — only shown while still pending #}
+            {% if not item.received_date_str %}
+            <form method="post" action="/packages/{{ item.id }}/received">
+              <input type="hidden" name="csrf" value="{{ csrf }}" />
+              <button
+                type="submit"
+                class="btn btn-sm btn-outline-success"
+                title="Mark as received today"
+              >✓ Received</button>
+            </form>
+            {% endif %}
+            {# Delete #}
+            <form
+              method="post"
+              action="/packages/{{ item.id }}/delete"
+              onsubmit="return confirm('Delete package «{{ item.name }}»?')"
+            >
+              <input type="hidden" name="csrf" value="{{ csrf }}" />
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                🗑
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock content %}

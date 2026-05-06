@@ -38,3 +38,14 @@ diesel::table! {
         created_at -> BigInt,
     }
 }
+
+diesel::table! {
+    packages (id) {
+        id -> Integer,
+        name -> Text,
+        ordered_date -> BigInt,
+        received_date -> Nullable<BigInt>,
+        user_id -> Integer,
+        tracking_id -> Nullable<Text>,
+    }
+}
