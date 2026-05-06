@@ -26,3 +26,10 @@ chrono = { version = "0.4", features = ["alloc"] }
 libsqlite3-sys = { version = "0.35", features = ["bundled"] }
 clap = { version = "4.3", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
+
+# Email
+lettre = { version = "0.11", features = ["smtp-transport", "builder", "native-tls"] }
+
+[[bin]]
+name = "pending-packages"
+path = "src/bin/pending_packages.rs"
