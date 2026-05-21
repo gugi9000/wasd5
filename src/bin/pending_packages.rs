@@ -9,13 +9,7 @@
 //!   DATABASE_URL      path to the SQLite database (default: wasd5.db)
 //!   SITE_URL          base URL used in email links (default: https://wasd.dk)
 //!
-//! SMTP (required when --email is used):
-//!   SMTP_HOST         mail server hostname (default: localhost)
-//!   SMTP_PORT         port number (default: 587)
-//!   SMTP_TLS          "starttls" (default) | "tls" (port 465) | "none"
-//!   SMTP_USERNAME     login username (optional)
-//!   SMTP_PASSWORD     login password (optional)
-//!   SMTP_FROM         envelope/From address (default: noreply@wasd.dk)
+//! SMTP — see wasd5::email for the full list of SMTP_* variables.
 
 use std::collections::HashMap;
 use std::env;
@@ -24,6 +18,7 @@ use chrono::{TimeZone, Utc};
 use clap::Parser;
 use diesel::prelude::*;
 use wasd5::db;
+use wasd5::email::{SmtpConfig, send_email};
 use wasd5::models::{Package, User};
 
 // ---------------------------------------------------------------------------
@@ -157,54 +152,6 @@ fn build_html(username: &str, pkgs: &[Package], site_url: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// SMTP delivery
-// ---------------------------------------------------------------------------
-
-fn send_email(
-    smtp_host: &str,
-    smtp_port: u16,
-    smtp_tls: &str,
-    smtp_user: Option<&str>,
-    smtp_pass: Option<&str>,
-    from: &str,
-    to_addr: &str,
-    subject: &str,
-    plain: &str,
-    html_body: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    use lettre::message::{MultiPart, SinglePart};
-    use lettre::transport::smtp::authentication::Credentials;
-    use lettre::{Message, SmtpTransport, Transport};
-
-    let message = Message::builder()
-        .from(from.parse()?)
-        .to(to_addr.parse()?)
-        .subject(subject)
-        .multipart(
-            MultiPart::alternative()
-                .singlepart(SinglePart::plain(plain.to_string()))
-                .singlepart(SinglePart::html(html_body.to_string())),
-        )?;
-
-    // Choose the right TLS mode.
-    // "tls"      → implicit TLS (SMTPS, typically port 465)
-    // "none"     → plain SMTP, no TLS (e.g. local relay on port 25)
-    // "starttls" → STARTTLS upgrade (default, typically port 587)
-    let mut builder = match smtp_tls {
-        "tls" => SmtpTransport::relay(smtp_host)?.port(smtp_port),
-        "none" => SmtpTransport::builder_dangerous(smtp_host).port(smtp_port),
-        _ => SmtpTransport::starttls_relay(smtp_host)?.port(smtp_port),
-    };
-
-    if let (Some(u), Some(p)) = (smtp_user, smtp_pass) {
-        builder = builder.credentials(Credentials::new(u.to_string(), p.to_string()));
-    }
-
-    builder.build().send(&message)?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -281,16 +228,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         return Ok(());
     }
 
-    let smtp_host = env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string());
-    let smtp_port: u16 = env::var("SMTP_PORT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(587);
-    let smtp_tls = env::var("SMTP_TLS").unwrap_or_else(|_| "starttls".to_string());
-    let smtp_user = env::var("SMTP_USERNAME").ok();
-    let smtp_pass = env::var("SMTP_PASSWORD").ok();
-    let from = env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@wasd.dk".to_string());
-
+    let smtp = SmtpConfig::from_env();
     let mut sent = 0usize;
     let mut skipped = 0usize;
 
@@ -319,18 +257,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
                     }
                     println!();
                 } else {
-                    match send_email(
-                        &smtp_host,
-                        smtp_port,
-                        &smtp_tls,
-                        smtp_user.as_deref(),
-                        smtp_pass.as_deref(),
-                        &from,
-                        to_addr,
-                        &subject,
-                        &plain,
-                        &html,
-                    ) {
+                    match send_email(&smtp, to_addr, &subject, &plain, &html) {
                         Ok(()) => {
                             println!("[sent]  {} <{}>", u.username, to_addr);
                             sent += 1;

@@ -1,5 +1,6 @@
 use super::schema::{
-    calendar_allowed_ips, calendar_appointments, calendar_persons, packages, users,
+    calendar_allowed_ips, calendar_appointments, calendar_persons, creatine_intakes, packages,
+    users,
 };
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -14,6 +15,7 @@ pub struct User {
     pub role: String,
     pub created_at: i64,
     pub email: Option<String>,
+    pub creatine_reminder: i32,
 }
 
 #[derive(Insertable)]
@@ -97,6 +99,103 @@ pub struct NewPackage {
     pub ordered_date: i64,
     pub user_id: i32,
     pub tracking_id: Option<String>,
+}
+
+#[derive(Queryable, Identifiable, Serialize, Debug, Clone)]
+#[diesel(table_name = creatine_intakes)]
+pub struct CreatineIntake {
+    pub id: i32,
+    pub user_id: i32,
+    pub date: String,
+    pub amount_grams: f64,
+    pub recorded_at: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = creatine_intakes)]
+pub struct NewCreatineIntake {
+    pub user_id: i32,
+    pub date: String,
+    pub amount_grams: f64,
+    pub recorded_at: i64,
+}
+
+impl CreatineIntake {
+    /// All intakes for a user, ordered newest first.
+    pub fn all_for_user(conn: &mut SqliteConnection, uid: i32) -> Vec<CreatineIntake> {
+        use super::schema::creatine_intakes::dsl::*;
+        creatine_intakes
+            .filter(user_id.eq(uid))
+            .order(date.asc())
+            .load::<CreatineIntake>(conn)
+            .unwrap_or_default()
+    }
+
+    /// Single intake for a user on a specific date ("YYYY-MM-DD").
+    pub fn for_user_on_date(
+        conn: &mut SqliteConnection,
+        uid: i32,
+        d: &str,
+    ) -> Option<CreatineIntake> {
+        use super::schema::creatine_intakes::dsl::*;
+        creatine_intakes
+            .filter(user_id.eq(uid).and(date.eq(d)))
+            .first::<CreatineIntake>(conn)
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    /// The most recent intake for a user (for defaulting the amount field).
+    pub fn last_for_user(conn: &mut SqliteConnection, uid: i32) -> Option<CreatineIntake> {
+        use super::schema::creatine_intakes::dsl::*;
+        creatine_intakes
+            .filter(user_id.eq(uid))
+            .order(date.desc())
+            .first::<CreatineIntake>(conn)
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    /// Insert or update today's intake (upsert by user_id + date).
+    pub fn upsert(conn: &mut SqliteConnection, new: NewCreatineIntake) -> diesel::QueryResult<()> {
+        use super::schema::creatine_intakes::dsl::*;
+        let existing: Option<CreatineIntake> = creatine_intakes
+            .filter(user_id.eq(new.user_id).and(date.eq(&new.date)))
+            .first::<CreatineIntake>(conn)
+            .optional()?;
+        if existing.is_some() {
+            diesel::update(
+                creatine_intakes.filter(user_id.eq(new.user_id).and(date.eq(&new.date))),
+            )
+            .set(amount_grams.eq(new.amount_grams))
+            .execute(conn)?;
+        } else {
+            diesel::insert_into(creatine_intakes)
+                .values(&new)
+                .execute(conn)?;
+        }
+        Ok(())
+    }
+
+    /// Delete the intake for a specific date (owned by the user).
+    pub fn delete(conn: &mut SqliteConnection, uid: i32, d: &str) -> diesel::QueryResult<usize> {
+        use super::schema::creatine_intakes::dsl::*;
+        diesel::delete(creatine_intakes.filter(user_id.eq(uid).and(date.eq(d)))).execute(conn)
+    }
+
+    /// Set the creatine_reminder flag for a user.
+    pub fn set_reminder(
+        conn: &mut SqliteConnection,
+        uid: i32,
+        enabled: bool,
+    ) -> diesel::QueryResult<usize> {
+        use super::schema::users::dsl::{creatine_reminder, id, users};
+        diesel::update(users.filter(id.eq(uid)))
+            .set(creatine_reminder.eq(if enabled { 1 } else { 0 }))
+            .execute(conn)
+    }
 }
 
 impl Package {

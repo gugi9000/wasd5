@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN creatine_reminder INTEGER NOT NULL DEFAULT 0;

@@ -33,3 +33,7 @@ lettre = { version = "0.11", features = ["smtp-transport", "builder", "native-tl
 [[bin]]
 name = "pending-packages"
 path = "src/bin/pending_packages.rs"
+
+[[bin]]
+name = "creatine-reminder"
+path = "src/bin/creatine_reminder.rs"

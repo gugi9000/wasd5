@@ -1,0 +1,338 @@
+{% extends "base" %} {% block title %}Creatine Tracker{% endblock title %} {%
+block content %}
+<div class="py-2">
+    {# ── Header ───────────────────────────────────────────────────────────────
+    #}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">💪 Creatine Tracker</h2>
+            <div class="text-muted small mt-1">
+                Logged in as <strong>{{ username }}</strong>
+            </div>
+        </div>
+        <a href="/admin" class="btn btn-outline-secondary btn-sm">← Admin</a>
+    </div>
+
+    {# ── Today's status card
+    ─────────────────────────────────────────────────── #}
+    <div
+        class="card mb-4 {% if today_has_intake %}border-success{% else %}border-warning{% endif %}"
+        style="border-width: 2px"
+    >
+        <div class="card-body">
+            {% if today_has_intake %}
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div>
+                    <span class="fs-4">✅</span>
+                </div>
+                <div>
+                    <div class="fw-semibold">Creatine logged for today</div>
+                    <div class="text-muted small">
+                        {{ today_intake_amount }}g recorded on {{ today }}
+                    </div>
+                </div>
+                <div class="ms-auto">
+                    <form method="post" action="/creatine/log" class="d-inline">
+                        <input type="hidden" name="csrf" value="{{ csrf }}" />
+                        <div
+                            class="input-group input-group-sm"
+                            style="width: 180px"
+                        >
+                            <input
+                                type="number"
+                                name="amount_grams"
+                                value="{{ today_intake_amount }}"
+                                step="0.5"
+                                min="0.1"
+                                max="50"
+                                class="form-control"
+                                aria-label="Amount in grams"
+                            />
+                            <span class="input-group-text">g</span>
+                            <button
+                                type="submit"
+                                class="btn btn-outline-success"
+                            >
+                                Update
+                            </button>
+                        </div>
+                    </form>
+                    <form
+                        method="post"
+                        action="/creatine/delete"
+                        class="d-inline ms-1"
+                    >
+                        <input type="hidden" name="csrf" value="{{ csrf }}" />
+                        <input type="hidden" name="date" value="{{ today }}" />
+                        <button
+                            type="submit"
+                            class="btn btn-outline-danger btn-sm"
+                            onclick="return confirm('Remove today\'s log?');"
+                        >
+                            Undo
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div>
+                    <span class="fs-4">⏳</span>
+                </div>
+                <div>
+                    <div class="fw-semibold">Not yet logged today</div>
+                    <div class="text-muted small">{{ today }}</div>
+                </div>
+                <div class="ms-auto">
+                    <form
+                        method="post"
+                        action="/creatine/log"
+                        class="d-flex align-items-center gap-2"
+                    >
+                        <input type="hidden" name="csrf" value="{{ csrf }}" />
+                        <div
+                            class="input-group input-group-sm"
+                            style="width: 180px"
+                        >
+                            <input
+                                type="number"
+                                name="amount_grams"
+                                value="{{ last_amount }}"
+                                step="0.5"
+                                min="0.5"
+                                max="50"
+                                class="form-control"
+                                aria-label="Amount in grams"
+                            />
+                            <span class="input-group-text">g</span>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm">
+                            Log intake
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Stats + reminder row
+    ────────────────────────────────────────────────── #}
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-md-4">
+            <div class="card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <span class="fs-2">📅</span>
+                    <div>
+                        <div class="fw-bold fs-4">{{ days_this_month }}</div>
+                        <div class="text-muted small">
+                            days logged in {{ month_name }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-8">
+            <div class="card h-100">
+                <div
+                    class="card-body d-flex align-items-center gap-3 flex-wrap"
+                >
+                    <span class="fs-2">🔔</span>
+                    <div>
+                        <div class="fw-semibold">Email reminders</div>
+                        <div class="text-muted small">
+                            {% if reminder_enabled %} Enabled — you'll receive a
+                            daily email if you haven't logged yet. {% else %}
+                            Disabled — no reminder emails will be sent. {% endif
+                            %}
+                        </div>
+                    </div>
+                    <div class="ms-auto">
+                        {% if reminder_enabled %}
+                        <form method="post" action="/creatine/reminder">
+                            <input
+                                type="hidden"
+                                name="csrf"
+                                value="{{ csrf }}"
+                            />
+                            <input type="hidden" name="enabled" value="0" />
+                            <button
+                                type="submit"
+                                class="btn btn-outline-warning btn-sm"
+                            >
+                                Disable reminders
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="/creatine/reminder">
+                            <input
+                                type="hidden"
+                                name="csrf"
+                                value="{{ csrf }}"
+                            />
+                            <input type="hidden" name="enabled" value="1" />
+                            <button
+                                type="submit"
+                                class="btn btn-outline-primary btn-sm"
+                            >
+                                Enable reminders
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Calendar
+    ────────────────────────────────────────────────────────────── #}
+    <div class="card">
+        <div class="card-body">
+            {# Month navigation #}
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <a
+                    href="/creatine?year={{ prev_year }}&month={{ prev_month }}"
+                    class="btn btn-outline-secondary btn-sm"
+                    >← Prev</a
+                >
+                <h5 class="mb-0">{{ month_name }}</h5>
+                <a
+                    href="/creatine?year={{ next_year }}&month={{ next_month }}"
+                    class="btn btn-outline-secondary btn-sm"
+                    >Next →</a
+                >
+            </div>
+
+            {# Calendar grid #}
+            <div class="table-responsive">
+                <table
+                    class="table table-bordered mb-0"
+                    style="table-layout: fixed"
+                >
+                    <thead>
+                        <tr class="text-center text-muted small">
+                            <th class="py-1">Mon</th>
+                            <th class="py-1">Tue</th>
+                            <th class="py-1">Wed</th>
+                            <th class="py-1">Thu</th>
+                            <th class="py-1">Fri</th>
+                            <th class="py-1" style="color: var(--brand-color)">
+                                Sat
+                            </th>
+                            <th class="py-1" style="color: var(--brand-color)">
+                                Sun
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for week in weeks %}
+                        <tr>
+                            {% for day in week %}
+                            <td
+                                class="text-center p-1 position-relative"
+                                style="height:58px; vertical-align:top;
+                  {% if not day.in_month %}opacity:0.38;{% endif %}
+                  {% if day.has_intake %}background:rgba(25,135,84,0.15);{% endif %}
+                  {% if day.is_today %}outline:2px solid var(--brand-color);outline-offset:-2px;{% endif %}
+                  "
+                            >
+                                <div
+                                    class="small fw-semibold {% if day.is_today %}text-primary{% endif %}"
+                                >
+                                    {{ day.day }}
+                                </div>
+                                {% if day.has_intake %}
+                                <div
+                                    style="
+                                        font-size: 0.65rem;
+                                        color: #198754;
+                                        font-weight: 600;
+                                        line-height: 1.1;
+                                        margin-top: 2px;
+                                    "
+                                >
+                                    {{ day.amount }}g
+                                </div>
+                                {% if day.in_month %}
+                                <form
+                                    method="post"
+                                    action="/creatine/delete"
+                                    style="margin: 0; padding: 0"
+                                >
+                                    <input
+                                        type="hidden"
+                                        name="csrf"
+                                        value="{{ csrf }}"
+                                    />
+                                    <input
+                                        type="hidden"
+                                        name="date"
+                                        value="{{ day.date }}"
+                                    />
+                                    <button
+                                        type="submit"
+                                        title="Remove log for {{ day.date }}"
+                                        onclick="return confirm('Remove creatine log for {{ day.date }}?')"
+                                        style="
+                                            position: absolute;
+                                            top: 2px;
+                                            right: 2px;
+                                            border: none;
+                                            background: transparent;
+                                            color: #dc3545;
+                                            font-size: 0.6rem;
+                                            padding: 0;
+                                            line-height: 1;
+                                            cursor: pointer;
+                                        "
+                                    >
+                                        ✕
+                                    </button>
+                                </form>
+                                {% endif %} {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# Legend #}
+            <div class="d-flex gap-3 mt-2 text-muted small flex-wrap">
+                <span>
+                    <span
+                        style="
+                            display: inline-block;
+                            width: 14px;
+                            height: 14px;
+                            background: rgba(25, 135, 84, 0.2);
+                            border: 1px solid rgba(25, 135, 84, 0.4);
+                            border-radius: 2px;
+                            vertical-align: middle;
+                        "
+                    ></span>
+                    Intake logged
+                </span>
+                <span>
+                    <span
+                        style="
+                            display: inline-block;
+                            width: 14px;
+                            height: 14px;
+                            outline: 2px solid var(--brand-color);
+                            border-radius: 2px;
+                            vertical-align: middle;
+                        "
+                    ></span>
+                    Today
+                </span>
+                <span class="ms-auto">
+                    Tap <strong>✕</strong> on a cell to remove that day's log
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}

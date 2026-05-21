@@ -22,6 +22,7 @@ use uuid::Uuid;
 
 mod admin;
 mod calendar;
+mod creatine;
 mod db;
 mod helpers;
 mod models;
@@ -39,6 +40,7 @@ use calendar::{
     api_calendar_access, api_calendar_create, api_calendar_delete, api_calendar_get,
     api_calendar_update, calendar_index,
 };
+use creatine::{creatine_delete, creatine_index, creatine_log, creatine_reminder_toggle};
 use helpers::format_modified;
 use packages::{create_package, delete_package, list_packages, mark_received};
 
@@ -473,7 +475,11 @@ async fn main() -> Result<(), rocket::Error> {
                 list_packages,
                 create_package,
                 delete_package,
-                mark_received
+                mark_received,
+                creatine_index,
+                creatine_log,
+                creatine_delete,
+                creatine_reminder_toggle
             ],
         )
         .mount("/static", FileServer::from(STATIC_DIR))

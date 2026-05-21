@@ -9,6 +9,7 @@ diesel::table! {
         role -> Text,
         created_at -> BigInt,
         email -> Nullable<Text>,
+        creatine_reminder -> Integer,
     }
 }
 
@@ -48,5 +49,15 @@ diesel::table! {
         received_date -> Nullable<BigInt>,
         user_id -> Integer,
         tracking_id -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    creatine_intakes (id) {
+        id -> Integer,
+        user_id -> Integer,
+        date -> Text,
+        amount_grams -> Double,
+        recorded_at -> BigInt,
     }
 }

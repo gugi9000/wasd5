@@ -32,6 +32,10 @@ block content %}
             <strong>Pictures</strong>
             <div class="text-muted small">Upload and manage images</div>
         </a>
+        <a href="/creatine" class="list-group-item list-group-item-action">
+            <strong>Creatine tracker</strong>
+            <div class="text-muted small">Log daily creatine intake &amp; manage reminders</div>
+        </a>
         <a
             href="/admin/calendar"
             class="list-group-item list-group-item-action"
