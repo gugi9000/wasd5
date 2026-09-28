@@ -42,7 +42,7 @@ use calendar::{
 };
 use creatine::{creatine_delete, creatine_index, creatine_log, creatine_reminder_toggle};
 use helpers::format_modified;
-use packages::{create_package, delete_package, list_packages, mark_received};
+use packages::{create_package, delete_package, list_packages, mark_received, update_tracking};
 
 pub(crate) const PAGES_DIR: &str = "pages";
 const STATIC_DIR: &str = "static";
@@ -476,6 +476,7 @@ async fn main() -> Result<(), rocket::Error> {
                 create_package,
                 delete_package,
                 mark_received,
+                update_tracking,
                 creatine_index,
                 creatine_log,
                 creatine_delete,

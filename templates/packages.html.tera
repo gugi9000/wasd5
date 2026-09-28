@@ -67,11 +67,18 @@
       <tr>
         <td class="fw-semibold">{{ item.name }}</td>
         <td>
-          {% if item.tracking_id %}
-            <code class="small">{{ item.tracking_id }}</code>
-          {% else %}
-            <span class="text-muted">—</span>
-          {% endif %}
+          <form method="post" action="/packages/{{ item.id }}/tracking" class="d-flex gap-1 align-items-center">
+            <input type="hidden" name="csrf" value="{{ csrf }}" />
+            <input
+              type="text"
+              name="tracking_id"
+              class="form-control form-control-sm"
+              style="min-width:140px"
+              value="{{ item.tracking_id | default(value='') }}"
+              placeholder="—"
+            />
+            <button type="submit" class="btn btn-sm btn-outline-secondary" title="Save tracking ID">💾</button>
+          </form>
         </td>
         <td class="small">{{ item.ordered_date_str }}</td>
         <td>

@@ -225,6 +225,19 @@ impl Package {
         diesel::delete(packages.filter(id.eq(pkg_id).and(user_id.eq(uid)))).execute(conn)
     }
 
+    /// Update `tracking_id` only if the package belongs to the given user.
+    pub fn update_tracking_id(
+        conn: &mut SqliteConnection,
+        pkg_id: i32,
+        uid: i32,
+        new_tracking: Option<String>,
+    ) -> diesel::QueryResult<usize> {
+        use super::schema::packages::dsl::*;
+        diesel::update(packages.filter(id.eq(pkg_id).and(user_id.eq(uid))))
+            .set(tracking_id.eq(new_tracking))
+            .execute(conn)
+    }
+
     /// Set `received_date` to `ts` only if the package belongs to the given user.
     pub fn mark_received(
         conn: &mut SqliteConnection,

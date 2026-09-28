@@ -1,10 +1,10 @@
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use rocket::FromForm;
 use rocket::form::Form;
 use rocket::http::CookieJar;
 use rocket::response::Redirect;
-use rocket::FromForm;
-use rocket::{get, post, State};
-use rocket_dyn_templates::{context, Template};
+use rocket::{State, get, post};
+use rocket_dyn_templates::{Template, context};
 use serde::Serialize;
 
 use crate::db::DbPool;
@@ -171,6 +171,46 @@ pub fn delete_package(
     }
     if let Ok(mut conn) = pool.get() {
         let _ = models::Package::delete(&mut conn, id, user_id);
+    }
+    Redirect::to("/packages")
+}
+
+// ---------------------------------------------------------------------------
+// POST /packages/<id>/tracking — update the tracking ID
+// ---------------------------------------------------------------------------
+
+#[derive(FromForm)]
+pub struct UpdateTrackingForm {
+    tracking_id: String,
+    csrf: String,
+}
+
+#[post("/packages/<id>/tracking", data = "<form>")]
+pub fn update_tracking(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    id: i32,
+    form: Form<UpdateTrackingForm>,
+) -> Redirect {
+    let Some(user_id) = get_session_user_id(jar) else {
+        return Redirect::to("/admin/login");
+    };
+    let f = form.into_inner();
+    if !valid_csrf(jar, &f.csrf) {
+        return Redirect::to("/packages");
+    }
+
+    let tracking = {
+        let t = f.tracking_id.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    };
+
+    if let Ok(mut conn) = pool.get() {
+        let _ = models::Package::update_tracking_id(&mut conn, id, user_id, tracking);
     }
     Redirect::to("/packages")
 }
