@@ -2,6 +2,15 @@
 
 A Rocket.rs based webapp for my personal site.
 
+## Breathing guide
+
+The Health menu links to `/tools/box-breathing`, an interactive tool with
+a four-second-per-edge box pattern and a 4-7-8 triangle. The triangle's dot
+moves continuously: inhale along one edge for 4 seconds, hold along the next
+for 7, and exhale along the last for 8, with no extra pauses. Both patterns
+can be paused; reduced-motion users start with a stationary guide.
+This tool is served by its own route and template, not a SQL Markdown article.
+
 ## start by creating an admin user
 
 ```bash

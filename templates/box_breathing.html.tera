@@ -1,0 +1,50 @@
+{% extends "base" %}
+
+{% block title %}Box breathing{% endblock title %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/box-breathing.css" />
+<section class="breathing-guide text-center" aria-labelledby="breathing-title">
+  <h1 id="breathing-title">Box breathing</h1>
+  <p class="text-muted">Let the moving dot guide your breathing around the shape.</p>
+  <fieldset class="mb-3">
+    <legend class="fs-6">Breathing pattern</legend>
+    <div class="d-flex justify-content-center gap-3 flex-wrap">
+      <label><input type="radio" name="breathing-pattern" value="box" checked /> Box (4-4-4-4)</label>
+      <label><input type="radio" name="breathing-pattern" value="triangle" /> 4-7-8</label>
+    </div>
+  </fieldset>
+
+  <div id="breathing-box" class="breathing-pattern">
+    <p>Each edge takes four seconds. Follow the dot clockwise from the top left.</p>
+    <svg class="breathing-shape" viewBox="0 0 400 400" role="img" aria-labelledby="box-title box-description">
+      <title id="box-title">Box breathing guide</title>
+      <desc id="box-description">Breathe in for four seconds, hold for four, breathe out for four, then hold for four. Repeat.</desc>
+      <path class="breathing-track" d="M80 80 H320 V320 H80 Z" />
+      <text x="200" y="52" text-anchor="middle">Inhale · 4s</text>
+      <text transform="translate(350 200) rotate(90)" text-anchor="middle">Hold · 4s</text>
+      <text x="200" y="360" text-anchor="middle">Exhale · 4s</text>
+      <text transform="translate(45 200) rotate(-90)" text-anchor="middle">Hold · 4s</text>
+      <circle class="breathing-dot breathing-dot-box" r="10" aria-hidden="true" />
+    </svg>
+  </div>
+
+  <div id="breathing-triangle" class="breathing-pattern" hidden>
+    <p>Inhale for 4 seconds, hold for 7, and exhale for 8. The dot keeps moving, even while you hold your breath.</p>
+    <svg class="breathing-shape" viewBox="0 0 400 400" role="img" aria-labelledby="triangle-title triangle-description">
+      <title id="triangle-title">4-7-8 triangular breathing guide</title>
+      <desc id="triangle-description">Start at the bottom left. Inhale up the left edge for four seconds, hold down the right edge for seven, then exhale along the bottom for eight. Repeat without an extra pause.</desc>
+      <path class="breathing-track" d="M70 320 L200 70 L330 320 Z" />
+      <text transform="translate(110 185) rotate(-62.5)" text-anchor="middle">Inhale · 4s</text>
+      <text transform="translate(290 185) rotate(62.5)" text-anchor="middle">Hold · 7s</text>
+      <text x="200" y="360" text-anchor="middle">Exhale · 8s</text>
+      <circle class="breathing-dot breathing-dot-triangle" r="10" aria-hidden="true" />
+    </svg>
+  </div>
+
+  <button id="breathing-toggle" class="btn btn-outline-primary" type="button" aria-pressed="false" disabled>Start animation</button>
+  <p class="text-muted small mt-3 mb-0">Sit comfortably and breathe gently. Choose a pace that feels comfortable; stop if you feel dizzy or short of breath.</p>
+  <noscript><p class="mt-3">Enable JavaScript to switch patterns and animate the guide. You can follow the four-second box instructions above without it.</p></noscript>
+</section>
+<script src="/static/box-breathing.js" defer></script>
+{% endblock content %}

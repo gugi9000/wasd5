@@ -1,0 +1,58 @@
+.breathing-shape {
+    display: block;
+    width: 100%;
+    max-width: 28rem;
+    margin: 0 auto 1rem;
+    overflow: visible;
+}
+
+.breathing-shape text {
+    fill: var(--bs-body-color);
+    font-size: 17px;
+}
+
+.breathing-track {
+    fill: none;
+    stroke: var(--brand-color);
+    stroke-width: 3;
+    stroke-linejoin: round;
+    opacity: 0.55;
+}
+
+.breathing-dot {
+    fill: var(--brand-color);
+    stroke: var(--card-bg);
+    stroke-width: 3;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-play-state: paused;
+}
+
+.breathing-guide.is-running .breathing-dot {
+    animation-play-state: running;
+}
+
+.breathing-dot-box {
+    transform: translate(80px, 80px);
+    animation-name: breathe-box;
+    animation-duration: 16s;
+}
+
+.breathing-dot-triangle {
+    transform: translate(70px, 320px);
+    animation-name: breathe-triangle;
+    animation-duration: 19s;
+}
+
+@keyframes breathe-box {
+    0%, 100% { transform: translate(80px, 80px); }
+    25% { transform: translate(320px, 80px); }
+    50% { transform: translate(320px, 320px); }
+    75% { transform: translate(80px, 320px); }
+}
+
+@keyframes breathe-triangle {
+    0%, 100% { transform: translate(70px, 320px); }
+    21.05263157894737% { transform: translate(200px, 70px); }
+    57.89473684210526% { transform: translate(330px, 320px); }
+}

@@ -253,6 +253,11 @@ fn ip(req: RemoteAddr) -> String {
     format!("{}\n", remote_ip)
 }
 
+#[get("/tools/box-breathing")]
+fn box_breathing(navigation: PageNavigation) -> Template {
+    Template::render("box_breathing", context! { pages: navigation.0 })
+}
+
 fn render_page(
     page: page_store::Page,
     pages: Vec<PageListing>,
@@ -457,6 +462,7 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_rename_move_picture,
                 admin_update_calendar_allowed_ips,
                 ip,
+                box_breathing,
                 page_root,
                 pages_index,
                 page_catch,
@@ -546,6 +552,7 @@ mod page_tests {
                 "/",
                 routes![
                     index,
+                    box_breathing,
                     page_catch,
                     page_root,
                     pages_index,
@@ -590,6 +597,23 @@ mod page_tests {
             .next()
             .unwrap()
             .to_string()
+    }
+
+    #[test]
+    fn breathing_tool_and_health_menu() {
+        let (client, _dir, _pool) = client();
+        let response = client.get("/tools/box-breathing").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let body = response.into_string().unwrap();
+        assert!(body.contains("Health"));
+        assert!(body.contains("href=\"/tools/box-breathing\""));
+        assert!(body.contains("Box breathing"));
+        assert!(body.contains("Box (4-4-4-4)"));
+        assert!(body.contains("4-7-8 triangular breathing guide"));
+        assert!(body.contains("Hold · 7s"));
+        assert!(body.contains("Exhale · 8s"));
+        assert!(body.contains("/static/box-breathing.css"));
+        assert!(body.contains("/static/box-breathing.js"));
     }
 
     #[test]
