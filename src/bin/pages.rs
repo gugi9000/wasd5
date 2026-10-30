@@ -1,7 +1,6 @@
 use std::env;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::Command;
 
 use clap::{Parser, Subcommand};
 use diesel::prelude::*;
@@ -81,11 +80,7 @@ fn editor_name(override_name: Option<String>) -> Result<String, pages::Error> {
 }
 
 fn edit_in_editor(pool: &db::DbPool, id: i32, name: &str) -> Result<(), pages::Error> {
-    let command = env::var("EDITOR").map_err(|_| {
-        "EDITOR is not set. Set $env:EDITOR = 'code --wait' in PowerShell, or export EDITOR='vi' in sh"
-    })?;
-    let args = shell_words::split(&command)?;
-    let (program, args) = args.split_first().ok_or("EDITOR must not be empty")?;
+    wasd5::editor::command()?;
     let (page, revision) = {
         let mut conn = pool.get()?;
         pages::for_edit(&mut conn, id)?
@@ -98,10 +93,7 @@ fn edit_in_editor(pool: &db::DbPool, id: i32, name: &str) -> Result<(), pages::E
     file.flush()?;
     let file = file.into_temp_path();
     let result = (|| -> Result<(), pages::Error> {
-        let status = Command::new(program).args(args).arg(&file).status()?;
-        if !status.success() {
-            return Err(format!("EDITOR exited with {status}; SQL page was not changed").into());
-        }
+        wasd5::editor::run(&file)?;
         let content = std::fs::read_to_string(&file)?;
         let mut conn = pool.get()?;
         pages::edit(&mut conn, id, revision, &content, page.hidden, name)?;

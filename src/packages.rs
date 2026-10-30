@@ -16,12 +16,12 @@ use crate::models;
 
 /// Returns the logged-in user's ID when there is a valid, non-expired session.
 fn get_session_user_id(jar: &CookieJar) -> Option<i32> {
-    let exp = jar.get_private("session_expires")?;
+    let exp = wasd5::auth::cookie(jar, "session_expires")?;
     let ts: i64 = exp.value().parse().ok()?;
     if ts <= Utc::now().timestamp() {
         return None;
     }
-    let uid = jar.get_private("user_id")?;
+    let uid = wasd5::auth::cookie(jar, "user_id")?;
     uid.value().parse::<i32>().ok()
 }
 
@@ -73,8 +73,7 @@ pub fn list_packages(
 ) -> Result<Template, Redirect> {
     let user_id = get_session_user_id(jar).ok_or_else(|| Redirect::to("/admin/login"))?;
 
-    let username = jar
-        .get_private("username")
+    let username = wasd5::auth::cookie(jar, "username")
         .map(|c| c.value().to_string())
         .unwrap_or_else(|| "User".to_string());
 

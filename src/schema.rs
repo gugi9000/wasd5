@@ -10,6 +10,8 @@ diesel::table! {
         created_at -> BigInt,
         email -> Nullable<Text>,
         creatine_reminder -> Integer,
+        disabled -> Bool,
+        session_version -> BigInt,
     }
 }
 

@@ -308,10 +308,11 @@ pub(crate) fn admin_login_post(
         .optional()
         .map_err(|_| Template::render("admin/login", context! { error: "DB error" }))?;
     if let Some(u) = user_opt {
-        if verify(&f.password, &u.password_hash).unwrap_or(false) {
+        if !u.disabled && verify(&f.password, &u.password_hash).unwrap_or(false) {
             jar.add_private(Cookie::new("user_id", u.id.to_string()));
             jar.add_private(Cookie::new("username", u.username.clone()));
             jar.add_private(Cookie::new("user_role", u.role.clone()));
+            jar.add_private(Cookie::new("session_version", u.session_version.to_string()));
             let expiry = Utc::now().timestamp() + 24 * 3600;
             jar.add_private(Cookie::new("session_expires", expiry.to_string()));
             return Ok(Redirect::to(match f.next.as_deref() {
@@ -335,6 +336,7 @@ pub(crate) fn admin_logout(jar: &CookieJar) -> Redirect {
     jar.remove_private(Cookie::new("username", ""));
     jar.remove_private(Cookie::new("user_role", ""));
     jar.remove_private(Cookie::new("session_expires", ""));
+    jar.remove_private(Cookie::new("session_version", ""));
     Redirect::to("/admin/login")
 }
 
@@ -1077,7 +1079,7 @@ fn check_page_edit(jar: &CookieJar, csrf: Option<&str>) -> Result<String, Status
     if csrf.is_none() || jar.get_private("csrf").as_ref().map(|c| c.value()) != csrf {
         return Err(Status::Forbidden);
     }
-    jar.get_private("username")
+    wasd5::auth::cookie(jar, "username")
         .map(|c| c.value().to_string())
         .filter(|s| !s.trim().is_empty())
         .ok_or(Status::Unauthorized)

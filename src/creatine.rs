@@ -23,12 +23,12 @@ use crate::models::{CreatineIntake, NewCreatineIntake};
 // ---------------------------------------------------------------------------
 
 fn get_session_user_id(jar: &CookieJar) -> Option<i32> {
-    let exp = jar.get_private("session_expires")?;
+    let exp = wasd5::auth::cookie(jar, "session_expires")?;
     let ts: i64 = exp.value().parse().ok()?;
     if ts <= Utc::now().timestamp() {
         return None;
     }
-    jar.get_private("user_id")?.value().parse::<i32>().ok()
+    wasd5::auth::cookie(jar, "user_id")?.value().parse::<i32>().ok()
 }
 
 fn valid_csrf(jar: &CookieJar, token: &str) -> bool {
@@ -104,8 +104,7 @@ pub fn creatine_index(
 ) -> Result<Template, Redirect> {
     let user_id = get_session_user_id(jar).ok_or_else(|| Redirect::to("/admin/login"))?;
 
-    let username = jar
-        .get_private("username")
+    let username = wasd5::auth::cookie(jar, "username")
         .map(|c| c.value().to_string())
         .unwrap_or_else(|| "User".to_string());
 

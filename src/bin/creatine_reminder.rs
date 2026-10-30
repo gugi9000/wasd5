@@ -109,14 +109,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
     let pool = db::establish_pool(&database_url);
     let mut conn = pool.get()?;
+    db::run_migrations(&mut conn)?;
 
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
     // ── Load users who have reminders enabled and have an email address ───────
     let reminder_users: Vec<User> = {
-        use wasd5::schema::users::dsl::{creatine_reminder, email, users};
+        use wasd5::schema::users::dsl::{creatine_reminder, disabled, email, users};
         users
             .filter(creatine_reminder.eq(1))
+            .filter(disabled.eq(false))
             .filter(email.is_not_null())
             .load::<User>(&mut conn)?
     };

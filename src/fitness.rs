@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::comics::{Private, Viewer};
 use crate::db::DbPool;
 use crate::schema::fitness_timers as timers;
+use wasd5::workouts::Workout;
 
 type Error = (Status, String);
 type Result<T> = std::result::Result<T, Error>;
@@ -16,61 +17,6 @@ pub fn routes() -> Vec<rocket::Route> {
     rocket::routes![
         index, new_timer, edit_timer, player, data, create, update, delete
     ]
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Step {
-    label: String,
-    seconds: Option<u32>,
-    repeats: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Block {
-    repeats: u32,
-    steps: Vec<Step>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct Workout {
-    repeats: u32,
-    blocks: Vec<Block>,
-}
-
-impl Workout {
-    fn validate(&self) -> Result<()> {
-        let repeat_ok = |n| (1..=100).contains(&n);
-        if !repeat_ok(self.repeats) || self.blocks.is_empty() || self.blocks.len() > 50 {
-            return Err(bad_input());
-        }
-        let mut count = 0u64;
-        for block in &self.blocks {
-            if !repeat_ok(block.repeats) || block.steps.is_empty() || block.steps.len() > 50 {
-                return Err(bad_input());
-            }
-            for step in &block.steps {
-                if step.label.trim().is_empty()
-                    || step.label.chars().count() > 100
-                    || !repeat_ok(step.repeats)
-                    || step.seconds.is_some_and(|s| !(1..=86400).contains(&s))
-                {
-                    return Err(bad_input());
-                }
-                count +=
-                    u64::from(self.repeats) * u64::from(block.repeats) * u64::from(step.repeats);
-            }
-        }
-        if count > 10000 {
-            return Err((
-                Status::UnprocessableEntity,
-                "Limit the workout to 10,000 expanded steps.".into(),
-            ));
-        }
-        Ok(())
-    }
 }
 
 fn bad_input() -> Error {
@@ -224,7 +170,7 @@ fn data(id: i32, pool: &State<DbPool>) -> Result<Json<TimerData>> {
     let workout: Workout = serde_json::from_str(&timer.workout).map_err(internal)?;
     workout
         .validate()
-        .map_err(|(_, message)| internal(message))?;
+        .map_err(internal)?;
     Ok(Json(TimerData {
         id,
         title: timer.title,
@@ -251,7 +197,7 @@ impl Save {
         {
             return Err(bad_input());
         }
-        self.workout.validate()?;
+        self.workout.validate().map_err(|message| (Status::UnprocessableEntity, message.into()))?;
         serde_json::to_string(&self.workout).map_err(internal)
     }
 }

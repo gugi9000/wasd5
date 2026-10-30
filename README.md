@@ -2,6 +2,74 @@
 
 A Rocket.rs based webapp for my personal site.
 
+## Management TUI
+
+`manage` is a Ratatui terminal application for trusted local operators. It opens
+the same SQLite database as the website; it does not require an in-app login.
+Anyone who can run it against the database has full administrative access.
+Back up the database before upgrading; embedded migrations run on startup.
+Deploy/restart the updated website as well as `manage` so account disabling and
+session revocation are enforced by the running web process.
+
+```powershell
+$env:DATABASE_URL = 'wasd5.db'
+$env:EDITOR = 'code --wait'
+$env:WASD_PAGE_EDITOR = 'Your editing name'
+cargo run --bin manage
+```
+
+Or run the built `manage` executable in an interactive terminal. Use
+`manage --database <path> --editor-name <name>` to override the database and
+page attribution. Without an attribution name the TUI prompts for one.
+The system editor uses `VISUAL`, then `EDITOR`; use an editor that waits until
+editing is complete. Quote executable paths containing spaces. No database
+connection or write transaction is held while the editor is open.
+
+Sections:
+
+- **Users:** create/edit accounts, reset passwords, change roles/email and
+  creatine reminder settings, disable or re-enable. Passwords are masked and
+  never shown in details. Blank passwords keep the existing hash when editing.
+  `d` disables rather than deleting; authored content and logs remain intact.
+  Edit `Disabled` to false to restore access. Disabling, re-enabling, changing
+  roles, or resetting a password revokes old sessions; users must log in again.
+  The last active admin cannot be disabled or demoted. Disabled users cannot
+  log in and receive no scheduled reminder emails.
+- **Pages:** list public pages and hidden drafts, create pages, edit Markdown
+  through the system editor, hide/publish, inspect full revision history.
+  New pages default to hidden. Edits use the same revision and attribution
+  mechanism as browser/CLI edits; existing slugs cannot be renamed here.
+- **Calendar:** create/edit/delete appointments, manage people and ordering,
+  and manage allowed IP addresses. Appointment forms refer to person IDs from
+  the people list. Dates use `YYYY-MM-DD`; optional times use `HH:MM`. People
+  with appointments cannot be deleted until those appointments are reassigned
+  or removed.
+- **Fitness timers:** create/edit/delete public workouts and reassign owners.
+  Enter on Workout JSON opens the system editor. It uses the same validated
+  `repeats` / `blocks` / `steps` definition as the web builder; each step has
+  `label`, `seconds` (`null` for manual rest), and `repeats`.
+- **Comics:** create/edit albums and edit existing strip captions, visibility,
+  and ordering. `d` hides albums/strips instead of deleting their files. Uploads
+  and banners remain in the website; strips cannot move between albums because
+  image storage is per-album.
+- **Packages:** create/edit/delete packages for any user, tracking numbers,
+  ordered dates, and received dates (blank means pending).
+- **Creatine logs:** create/edit/delete dated intake records for any user.
+
+Keys: Left/Right or Tab switches sections; Up/Down (or j/k) selects records;
+`n` creates; Enter/`e` edits; `d` disables/hides/deletes with confirmation;
+`v` shows details (including page history); `/` filters by ID or summary;
+`r` reloads; `q` quits. In forms, Tab/Up/Down selects fields, Enter/Space toggles
+booleans, Enter opens Markdown/JSON in the system editor, Ctrl+S saves, and Esc
+cancels. Unsaved changes require discard confirmation. Details support
+Up/Down/PgUp/PgDn scrolling.
+
+Saves and destructive actions check for concurrent changes rather than
+overwriting stale records. Failed saves remain in the form. Editor failures
+and failed saves preserve edited temporary files and display recovery paths.
+Successful saves and explicitly discarded drafts clean up their temporary
+files. Use `cargo test --test management --bin manage` for management tests.
+
 ## Comics
 
 The top-level Comics link opens `/comics`. Any signed-in user can create albums
@@ -147,7 +215,7 @@ export EDITOR='vi'
 export WASD_PAGE_EDITOR='Your name'
 ```
 
-`EDITOR` may contain arguments (quote executable paths containing spaces).
+`VISUAL` (preferred) or `EDITOR` may contain arguments (quote executable paths containing spaces).
 Use an editor that waits until editing finishes, such as `code --wait`.
 `--editor "Your name"` overrides `WASD_PAGE_EDITOR`. When attribution is unset,
 the CLI explains how to set it and asks who is editing; empty names are rejected.

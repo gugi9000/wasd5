@@ -162,6 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
     let pool = db::establish_pool(&database_url);
     let mut conn = pool.get()?;
+    db::run_migrations(&mut conn)?;
 
     // ── Load all pending packages, oldest first ──────────────────────────────
     let pending: Vec<Package> = {
@@ -239,6 +240,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         };
 
         let subject = format!("📦 {} pending package(s) waiting for you", pkgs.len());
+        if u.disabled {
+            println!("Skipping disabled account {}", u.username);
+            skipped += 1;
+            continue;
+        }
         let plain = build_plain(&u.username, pkgs, &site_url);
         let html = build_html(&u.username, pkgs, &site_url);
 

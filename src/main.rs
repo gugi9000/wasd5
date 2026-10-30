@@ -277,14 +277,13 @@ fn render_page(
 }
 
 pub(crate) fn is_admin_cookie(jar: &CookieJar) -> bool {
-    let ok_role = jar
-        .get_private("user_role")
+    let ok_role = wasd5::auth::cookie(jar, "user_role")
         .map(|c| c.value() == "admin")
         .unwrap_or(false);
     if !ok_role {
         return false;
     }
-    if let Some(exp) = jar.get_private("session_expires") {
+    if let Some(exp) = wasd5::auth::cookie(jar, "session_expires") {
         if let Ok(ts) = exp.value().parse::<i64>() {
             return ts > Utc::now().timestamp();
         }
@@ -452,6 +451,7 @@ async fn main() -> Result<(), rocket::Error> {
     }
 
     let fig = rocket::build()
+        .attach(wasd5::auth::sessions())
         .manage(pool)
         .manage(
             comics::ComicStorage::initialize(
@@ -560,6 +560,7 @@ mod page_tests {
                 .unwrap();
         }
         let app = rocket::custom(rocket::Config::debug_default())
+            .attach(wasd5::auth::sessions())
             .manage(pool.clone())
             .mount(
                 "/",
@@ -578,7 +579,11 @@ mod page_tests {
                     admin_edit_page_get,
                     admin_edit_page_post,
                     admin_landing_get,
-                    admin_landing_post
+                    admin_landing_post,
+                    list_packages,
+                    creatine_index,
+                    api_calendar_access,
+                    api_calendar_create
                 ],
             )
             .register("/", catchers![unauthorized, page_not_found])
@@ -652,6 +657,48 @@ mod page_tests {
         assert!(body.contains("Exhale · 8s"));
         assert!(body.contains("/static/box-breathing.css"));
         assert!(body.contains("/static/box-breathing.js"));
+    }
+
+    #[test]
+    fn disabled_users_lose_login_and_all_existing_session_access() {
+        let (client, _dir, pool) = client();
+        let csrf = login(&client);
+        let names = ["user_id", "username", "user_role", "session_expires", "session_version"];
+        let cookies: Vec<_> = names.into_iter().map(|name|
+            client.cookies().get_private(name).unwrap().into_owned()).collect();
+        let mut conn = pool.get().unwrap();
+        diesel::insert_into(schema::users::table).values(models::NewUser {
+            username: "other-admin", password_hash: &bcrypt::hash("password", 4).unwrap(),
+            role: "admin", created_at: 0, email: None,
+        }).execute(&mut conn).unwrap();
+        let admin = wasd5::management::list(&mut conn, wasd5::management::Section::Users).unwrap()
+            .into_iter().find(|r| r.values["username"] == "admin").unwrap();
+        wasd5::management::remove(&mut conn, wasd5::management::Section::Users, &admin, "Operator").unwrap();
+        assert_eq!(client.get("/admin").dispatch().headers().get_one("Location"), Some("/admin/login"));
+        let mut partial_session = client.get("/admin");
+        for cookie in cookies.iter().filter(|c| c.name() != "user_id") {
+            partial_session = partial_session.private_cookie(cookie.clone());
+        }
+        assert_eq!(partial_session.dispatch().headers().get_one("Location"), Some("/admin/login"));
+        assert_eq!(client.get("/packages").dispatch().headers().get_one("Location"), Some("/admin/login"));
+        assert_eq!(client.get("/creatine").dispatch().headers().get_one("Location"), Some("/admin/login"));
+        let access: serde_json::Value = client.get("/api/calendar/access")
+            .remote("127.0.0.1:12345".parse().unwrap()).dispatch().into_json().unwrap();
+        assert_eq!(access["allowed"], false);
+        assert_eq!(client.get("/page/drafts/secret").dispatch().status(), Status::NotFound);
+        assert_ne!(client.post("/admin/login").header(ContentType::Form)
+            .body("username=admin&password=password").dispatch().status(), Status::SeeOther);
+        let disabled = wasd5::management::list(&mut conn, wasd5::management::Section::Users).unwrap()
+            .into_iter().find(|r| r.id == admin.id).unwrap();
+        let mut values = disabled.values.clone();
+        values["disabled"] = serde_json::json!(false);
+        wasd5::management::save(&mut conn, wasd5::management::Section::Users, Some(&disabled), values).unwrap();
+        let mut request = client.post("/admin/pages/new").header(ContentType::Form)
+            .body(format!("slug=stale-session&content=bad&csrf={csrf}"));
+        for cookie in cookies { request = request.private_cookie(cookie); }
+        assert_eq!(request.dispatch().status(), Status::Unauthorized);
+        login(&client);
+        assert_eq!(client.get("/admin").dispatch().status(), Status::Ok);
     }
 
     #[test]

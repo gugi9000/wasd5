@@ -16,6 +16,8 @@ pub struct User {
     pub created_at: i64,
     pub email: Option<String>,
     pub creatine_reminder: i32,
+    pub disabled: bool,
+    pub session_version: i64,
 }
 
 #[derive(Insertable)]

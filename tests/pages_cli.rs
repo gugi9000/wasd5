@@ -9,6 +9,7 @@ fn command(database: &std::path::Path) -> Command {
     command
         .env("DATABASE_URL", database)
         .env_remove("WASD_PAGE_EDITOR")
+        .env_remove("VISUAL")
         .env_remove("EDITOR");
     command
 }
@@ -61,7 +62,7 @@ fn list_prompt_history_and_visibility() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("EDITOR is not set"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Set VISUAL or EDITOR"));
     let output = command(&database)
         .args(["hide", "1", "--editor", " "])
         .output()
@@ -125,7 +126,7 @@ fn editor_command_arguments_save_and_failure() {
         .unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("SQL page was not changed"));
+    assert!(stderr.contains("no changes saved to SQL"));
     let kept = stderr
         .lines()
         .find_map(|line| line.strip_prefix("Your temporary Markdown file was kept at "))

@@ -74,28 +74,11 @@ impl<'r> FromRequest<'r> for Viewer {
     type Error = ();
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let jar = request.cookies();
-        let expiry = jar
-            .get_private("session_expires")
-            .and_then(|c| c.value().parse::<i64>().ok());
-        let id = jar
-            .get_private("user_id")
-            .and_then(|c| c.value().parse::<i32>().ok());
-        let Some(id) = id.filter(|_| expiry.is_some_and(|ts| ts > chrono::Utc::now().timestamp()))
-        else {
-            return Outcome::Success(Viewer(None));
-        };
         let Some(pool) = request.rocket().state::<DbPool>() else {
             eprintln!("Comics database pool unavailable");
             return Outcome::Error((Status::InternalServerError, ()));
         };
-        let user = (|| -> Result<_, Box<dyn std::error::Error>> {
-            let mut conn = pool.get()?;
-            Ok(crate::schema::users::table
-                .find(id)
-                .first::<crate::models::User>(&mut conn)
-                .optional()?)
-        })();
+        let user = wasd5::auth::session_user(request.cookies(), pool);
         match user {
             Ok(user) => Outcome::Success(Viewer(user.map(|u| ComicUser {
                 id: u.id,
