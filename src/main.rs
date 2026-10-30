@@ -463,6 +463,11 @@ async fn main() -> Result<(), rocket::Error> {
         )
         .mount("/", comics::routes())
         .mount("/", fitness::routes())
+        .manage(wasd5::remote_management::RemoteManagement::from_env()
+            .expect("Invalid remote management configuration"))
+        .mount("/", wasd5::remote_management::routes())
+        .register("/api/manage", wasd5::remote_management::catchers())
+        .attach(wasd5::remote_management::no_cache())
         .mount(
             "/",
             routes![

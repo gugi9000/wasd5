@@ -70,6 +70,98 @@ and failed saves preserve edited temporary files and display recovery paths.
 Successful saves and explicitly discarded drafts clean up their temporary
 files. Use `cargo test --test management --bin manage` for management tests.
 
+### Remote management
+
+Run the same TUI against a running website:
+
+```powershell
+manage --remote https://wasd.dk
+```
+
+It prompts for an **active admin** username and a masked password. All sections,
+forms, revision/conflict checks, and local system-editor integration remain
+available. Remote mode never opens a local database; `--database` and
+`--editor-name` cannot be combined with `--remote`. Remote page attribution is
+always the signed-in username, enforced by the server.
+
+Remote access is **disabled by default**, independently of calendar access.
+Configure exact client IP addresses on the **server**, then restart the updated
+website:
+
+```powershell
+$env:MANAGEMENT_ALLOWED_IPS = '203.0.113.10,2001:db8::10'
+$env:MANAGEMENT_TRUSTED_PROXIES = '127.0.0.1,::1'
+```
+
+For a server managed by **Supervisor**, add the variables to the existing
+program configuration; switching to systemd is not necessary:
+
+```ini
+[program:wasd5]
+; Keep your existing command, directory, and other settings.
+environment=MANAGEMENT_ALLOWED_IPS="203.0.113.10",MANAGEMENT_TRUSTED_PROXIES="127.0.0.1,::1"
+```
+
+Replace `203.0.113.10` with your **client's public IP**, not the server's IP.
+Set the trusted proxy addresses to the actual reverse-proxy peers. Preserve
+any existing entries on the `environment=` line when adding these variables.
+Apply the configuration changes:
+
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+```
+
+The app does not load `.env` files automatically; variables must be supplied by
+the process environment or deployment tooling. Systemd also supports
+`Environment=` and `EnvironmentFile=`, but is not required for this setup.
+
+Both settings accept comma/whitespace-separated IPs, not CIDR ranges. Invalid
+settings stop startup rather than silently broadening access.
+`MANAGEMENT_TRUSTED_PROXIES` must contain only the actual network peers of your
+TLS-terminating reverse proxy. The management API uses the socket peer, **not**
+Rocket's configurable IP header, to decide whether to trust forwarded headers.
+Only explicitly trusted proxies may supply `X-Real-IP` and
+`X-Forwarded-Proto: https`; absent, repeated, malformed, or non-HTTPS headers are
+rejected. The proxy must **overwrite** these headers, never pass client-supplied
+values through. For example, inside your HTTPS nginx server:
+
+```nginx
+location /api/manage/ {
+    proxy_pass http://127.0.0.1:5010;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+This Rocket build has no direct TLS listener, so non-loopback management
+connections must arrive through such a trusted TLS proxy. Keep the Rocket
+listener private/firewalled. Allowlisting a proxy's address alone does **not**
+allow all of its clients when it is configured as a trusted proxy.
+
+HTTPS with normal certificate validation is mandatory in the client, except
+for direct localhost development:
+
+```powershell
+# Development server only (do not use behind a public, unconfigured proxy):
+$env:MANAGEMENT_ALLOWED_IPS = '127.0.0.1,::1'
+# MANAGEMENT_TRUSTED_PROXIES must be unset for direct localhost HTTP.
+manage --remote http://127.0.0.1:5010
+```
+
+The client refuses redirects, embedded credentials, URL paths/queries, and
+non-local HTTP. It does not expose a certificate-verification bypass.
+The `/api/manage/*` endpoints require a dedicated bearer session, not a browser
+cookie, and all responses are non-cacheable. Five failed login attempts per
+client IP trigger a five-minute login limit. Sessions are held only in server
+and client memory, bound to the login IP, expire after one hour, and are
+invalidated by logout, server restart, account disabling, role changes, or
+password resets. Admin status and account/session version are checked on each
+request and again inside write transactions. If access expires, failed saves
+keep the form and editor recovery files; restart `manage` to log in again.
+
+Validate with `cargo test --test remote_management --lib --bin manage`.
+
 ## Comics
 
 The top-level Comics link opens `/comics`. Any signed-in user can create albums

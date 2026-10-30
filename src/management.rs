@@ -6,7 +6,8 @@ use serde_json::{Value, json};
 use crate::{models, pages, schema::*, workouts::Workout};
 pub type Result<T> = std::result::Result<T, pages::Error>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Section {
     Users,
     Pages,
@@ -149,7 +150,8 @@ impl Section {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Record {
     pub id: i32,
     pub summary: String,
@@ -425,7 +427,18 @@ pub fn save(
     original: Option<&Record>,
     values: Value,
 ) -> Result<()> {
+    save_authorized(conn, section, original, values, |_| Ok(()))
+}
+
+pub(crate) fn save_authorized(
+    conn: &mut SqliteConnection,
+    section: Section,
+    original: Option<&Record>,
+    values: Value,
+    authorize: impl FnOnce(&mut SqliteConnection) -> Result<()>,
+) -> Result<()> {
     conn.immediate_transaction::<_, pages::Error, _>(|conn| {
+        authorize(conn)?;
         if let Some(record) = original { check_original(conn, section, record)?; }
         let id = original.map(|r| r.id);
         let now = Utc::now().timestamp();
@@ -590,12 +603,23 @@ pub fn remove(
     original: &Record,
     attribution: &str,
 ) -> Result<()> {
+    remove_authorized(conn, section, original, attribution, |_| Ok(()))
+}
+
+pub(crate) fn remove_authorized(
+    conn: &mut SqliteConnection,
+    section: Section,
+    original: &Record,
+    attribution: &str,
+    authorize: impl FnOnce(&mut SqliteConnection) -> Result<()>,
+) -> Result<()> {
     if section == Section::Users {
         let mut values = original.values.clone();
         values["disabled"] = json!(true);
-        return save(conn, section, Some(original), values);
+        return save_authorized(conn, section, Some(original), values, authorize);
     }
     conn.immediate_transaction::<_, pages::Error, _>(|conn| {
+        authorize(conn)?;
         check_original(conn, section, original)?;
         let id = original.id;
         match section {

@@ -19,15 +19,19 @@ use serde_json::Value;
 use wasd5::{
     db,
     management::{self, Field, Kind, Record, Section},
+    management_client::{self, Remote, Store},
     pages::Error,
 };
 
 #[derive(Parser)]
-#[command(about = "Trusted local TUI for wasd5 users, pages, calendar, and more")]
+#[command(about = "Local or authenticated remote TUI for wasd5 administration")]
 struct Args {
     /// SQLite database path; otherwise DATABASE_URL or wasd5.db
-    #[arg(long)]
+    #[arg(long, conflicts_with = "remote")]
     database: Option<String>,
+    /// Remote site origin (HTTPS, or localhost HTTP); prompts for admin credentials
+    #[arg(long, conflicts_with_all = ["database", "editor_name"])]
+    remote: Option<String>,
     /// Page revision attribution; otherwise WASD_PAGE_EDITOR or an in-app prompt
     #[arg(long)]
     editor_name: Option<String>,
@@ -260,7 +264,7 @@ enum Mode {
 }
 
 struct App {
-    pool: db::DbPool,
+    pool: Store,
     database: String,
     attribution: String,
     section: usize,
@@ -277,7 +281,7 @@ impl App {
     }
 
     fn refresh(&mut self) -> Result<(), Error> {
-        self.rows = management::list(&mut *self.pool.get()?, self.section())?;
+        self.rows = self.pool.list(self.section())?;
         self.clamp_selection();
         Ok(())
     }
@@ -366,8 +370,7 @@ impl App {
                 }
                 KeyCode::Char('v') => {
                     if let Some(record) = self.selected() {
-                        let text =
-                            management::details(&mut *self.pool.get()?, self.section(), &record)?;
+                        let text = self.pool.details(self.section(), &record)?;
                         self.mode = Mode::Details { text, scroll: 0 };
                     }
                 }
@@ -392,12 +395,7 @@ impl App {
             Mode::Form(mut form) => {
                 if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
                     let result = form.values().and_then(|values| {
-                        management::save(
-                            &mut *self.pool.get()?,
-                            form.section,
-                            form.original.as_ref(),
-                            values,
-                        )
+                        self.pool.save(form.section, form.original.as_ref(), values)
                     });
                     match result {
                         Ok(()) => {
@@ -484,12 +482,8 @@ impl App {
             }
             Mode::Confirm(record) => {
                 if key.code == KeyCode::Char('y') {
-                    management::remove(
-                        &mut *self.pool.get()?,
-                        self.section(),
-                        &record,
-                        &self.attribution,
-                    )?;
+                    self.pool
+                        .remove(self.section(), &record, &self.attribution)?;
                     self.refresh()?;
                     self.status = "Action completed.".into();
                 } else if !matches!(key.code, KeyCode::Esc | KeyCode::Char('n')) {
@@ -538,7 +532,7 @@ impl App {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("wasd5 - trusted local administration"),
+                    .title("wasd5 administration"),
             ),
             layout[0],
         );
@@ -684,18 +678,31 @@ fn main() -> Result<(), Error> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err("manage requires an interactive terminal. Use cli or pages for non-interactive commands.".into());
     }
-    let database = args
-        .database
-        .or_else(|| std::env::var("DATABASE_URL").ok())
-        .unwrap_or_else(|| "wasd5.db".into());
-    let pool = db::establish_pool(&database);
-    db::run_migrations(&mut *pool.get()?)?;
-    let attribution = args
-        .editor_name
-        .or_else(|| std::env::var("WASD_PAGE_EDITOR").ok())
-        .unwrap_or_default()
-        .trim()
-        .to_owned();
+    let (pool, database, attribution) = if let Some(origin) = args.remote {
+        let origin = management_client::remote_url(&origin)?;
+        print!("Admin username for {origin}: ");
+        io::stdout().flush()?;
+        let mut username = String::new();
+        io::stdin().read_line(&mut username)?;
+        let password = rpassword::prompt_password("Admin password: ")?;
+        let remote = Remote::login(origin.clone(), username.trim().to_owned(), password)?;
+        let attribution = remote.username.clone();
+        (Store::Remote(remote), origin.to_string(), attribution)
+    } else {
+        let database = args
+            .database
+            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .unwrap_or_else(|| "wasd5.db".into());
+        let pool = db::establish_pool(&database);
+        db::run_migrations(&mut *pool.get()?)?;
+        let attribution = args
+            .editor_name
+            .or_else(|| std::env::var("WASD_PAGE_EDITOR").ok())
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        (Store::Local(pool), database, attribution)
+    };
     let mut app = App {
         pool,
         database,
@@ -736,6 +743,8 @@ fn main() -> Result<(), Error> {
             }
         }
     }
+    drop(screen);
+    app.pool.logout()?;
     Ok(())
 }
 
@@ -743,6 +752,42 @@ fn main() -> Result<(), Error> {
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+
+    #[test]
+    fn remote_arguments_require_origin_and_reject_local_overrides() {
+        let args = Args::try_parse_from(["manage", "--remote", "https://example.org"]).unwrap();
+        assert_eq!(args.remote.as_deref(), Some("https://example.org"));
+        assert!(Args::try_parse_from(["manage", "--remote"]).is_err());
+        assert!(
+            Args::try_parse_from([
+                "manage",
+                "--remote",
+                "https://example.org",
+                "--database",
+                "local.db"
+            ])
+            .is_err()
+        );
+        assert!(
+            Args::try_parse_from([
+                "manage",
+                "--remote",
+                "https://example.org",
+                "--editor-name",
+                "Someone"
+            ])
+            .is_err()
+        );
+    }
+
+    impl App {
+        fn local_pool(&self) -> &db::DbPool {
+            match &self.pool {
+                Store::Local(pool) => pool,
+                Store::Remote(_) => panic!("Expected local test database"),
+            }
+        }
+    }
 
     #[test]
     fn unicode_input_and_password_masking() {
@@ -762,7 +807,7 @@ mod tests {
         let pool = db::establish_pool(dir.path().join("test.db").to_str().unwrap());
         db::run_migrations(&mut pool.get().unwrap()).unwrap();
         let app = App {
-            pool,
+            pool: pool.into(),
             database: "test".into(),
             attribution: "tester".into(),
             section: 0,
@@ -791,7 +836,7 @@ mod tests {
         let pool = db::establish_pool(dir.path().join("test.db").to_str().unwrap());
         db::run_migrations(&mut pool.get().unwrap()).unwrap();
         let mut app = App {
-            pool,
+            pool: pool.into(),
             database: "test".into(),
             attribution: "tester".into(),
             section: 0,
@@ -827,7 +872,7 @@ mod tests {
         db::run_migrations(&mut pool.get().unwrap()).unwrap();
         (
             App {
-                pool,
+                pool: pool.into(),
                 database: "test".into(),
                 attribution: "Operator".into(),
                 section: 1,
@@ -877,7 +922,7 @@ mod tests {
         let temp = form.files[0].to_path_buf();
         assert!(temp.exists());
         assert_eq!(
-            wasd5::pages::list(&mut app.pool.get().unwrap(), true)
+            wasd5::pages::list(&mut app.local_pool().get().unwrap(), true)
                 .unwrap()
                 .len(),
             0
@@ -889,7 +934,7 @@ mod tests {
         .unwrap();
         assert!(matches!(app.mode, Mode::Browse));
         assert!(!temp.exists());
-        let page = wasd5::pages::list(&mut app.pool.get().unwrap(), true)
+        let page = wasd5::pages::list(&mut app.local_pool().get().unwrap(), true)
             .unwrap()
             .remove(0);
         assert_eq!(page.content, "# Edited in system editor\n");
@@ -910,7 +955,7 @@ mod tests {
     fn conflict_retains_draft_recovery_file_and_cancel_requires_confirmation() {
         let (mut app, _dir) = app();
         let page = wasd5::pages::create(
-            &mut app.pool.get().unwrap(),
+            &mut app.local_pool().get().unwrap(),
             "conflict",
             "Original",
             "Operator",
@@ -945,7 +990,7 @@ mod tests {
         };
         let temp = form.files[0].to_path_buf();
         {
-            let mut conn = app.pool.get().unwrap();
+            let mut conn = app.local_pool().get().unwrap();
             let revision = wasd5::pages::latest_revision(&mut conn, page.id).unwrap();
             wasd5::pages::edit(
                 &mut conn,
@@ -984,7 +1029,7 @@ mod tests {
         .unwrap();
         assert!(matches!(app.mode, Mode::Browse));
         assert_eq!(
-            wasd5::pages::by_id(&mut app.pool.get().unwrap(), page.id)
+            wasd5::pages::by_id(&mut app.local_pool().get().unwrap(), page.id)
                 .unwrap()
                 .content,
             "Other edit"
