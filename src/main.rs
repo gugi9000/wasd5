@@ -1,6 +1,4 @@
-use std::fs;
 use std::path::PathBuf;
-use std::time::SystemTime;
 use std::{collections::HashMap, env};
 
 use chrono::Utc;
@@ -13,12 +11,12 @@ use rocket::http::Status;
 use rocket::http::{Cookie, CookieJar};
 use rocket::request::{self, FromRequest, Outcome, Request};
 use rocket::response::Redirect;
-use rocket::response::status::NotFound;
-use rocket::{get, routes};
+use rocket::{State, get, routes};
 use rocket_dyn_templates::tera;
 use rocket_dyn_templates::{Template, context};
 use serde::Serialize;
 use uuid::Uuid;
+use wasd5::pages as page_store;
 
 mod admin;
 mod calendar;
@@ -44,14 +42,54 @@ use creatine::{creatine_delete, creatine_index, creatine_log, creatine_reminder_
 use helpers::format_modified;
 use packages::{create_package, delete_package, list_packages, mark_received, update_tracking};
 
-pub(crate) const PAGES_DIR: &str = "pages";
 const STATIC_DIR: &str = "static";
 
 #[derive(Serialize, Clone)]
 pub(crate) struct PageListing {
+    id: i32,
     slug: String,
     title: String,
     modified: u64,
+    hidden: bool,
+}
+
+pub(crate) struct PageNavigation(Vec<PageListing>);
+
+#[async_trait]
+impl<'r> FromRequest<'r> for PageNavigation {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        let Some(pool) = req.rocket().state::<db::DbPool>() else {
+            eprintln!("Page database pool is unavailable");
+            return Outcome::Error((Status::InternalServerError, ()));
+        };
+        let result = (|| -> Result<_, page_store::Error> {
+            let mut conn = pool.get()?;
+            Ok(page_store::list(&mut conn, is_admin_cookie(req.cookies()))?
+                .into_iter()
+                .map(|page| PageListing {
+                    id: page.id,
+                    title: page.title(),
+                    slug: page.slug,
+                    modified: page.updated_at.max(0) as u64,
+                    hidden: page.hidden,
+                })
+                .collect())
+        })();
+        match result {
+            Ok(pages) => Outcome::Success(PageNavigation(pages)),
+            Err(error) => {
+                eprintln!("Failed to load page navigation: {error}");
+                Outcome::Error((Status::InternalServerError, ()))
+            }
+        }
+    }
+}
+
+pub(crate) fn page_error(error: impl std::fmt::Display) -> Status {
+    eprintln!("Page operation failed: {error}");
+    Status::InternalServerError
 }
 
 #[derive(Serialize)]
@@ -68,6 +106,30 @@ struct LatestItem {
     slug: String,
     title: String,
     modified_rel: String,
+}
+
+#[derive(Serialize)]
+struct PageMetadata {
+    created_at: String,
+    last_updated: String,
+    creator: String,
+    editors: Vec<String>,
+    hidden: bool,
+}
+
+fn page_metadata(
+    page: &page_store::Page,
+    conn: &mut diesel::SqliteConnection,
+) -> Result<PageMetadata, Status> {
+    let revisions = page_store::history(conn, page.id).map_err(page_error)?;
+    let (abs, rel) = format_modified(page.updated_at.max(0) as u64);
+    Ok(PageMetadata {
+        created_at: format_modified(page.created_at.max(0) as u64).0,
+        last_updated: format!("{abs} ({rel})"),
+        creator: page.creator.clone(),
+        editors: page_store::editors(&revisions),
+        hidden: page.hidden,
+    })
 }
 
 fn markdown_to_html(md: &str) -> String {
@@ -113,64 +175,24 @@ fn test_slug_to_path() {
     assert_eq!(slug_to_category(""), "/");
 }
 
-fn collect_pages(dir: &std::path::Path, base: &std::path::Path, pages: &mut Vec<PageListing>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for e in entries.flatten() {
-        let path = e.path();
-        if path.is_dir() {
-            collect_pages(&path, base, pages);
-        } else if path
-            .extension()
-            .and_then(|s| s.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
-        {
-            if let (Some(stem), Ok(rel)) = (
-                path.file_stem().and_then(|s| s.to_str()),
-                path.strip_prefix(base),
-            ) {
-                let slug = rel.with_extension("").to_string_lossy().replace('\\', "/");
-                let title = stem.replace('-', " ");
-                let modified = match path.metadata().and_then(|m| m.modified()) {
-                    Ok(t) => t
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0),
-                    Err(_) => 0,
-                };
-                pages.push(PageListing {
-                    slug,
-                    title,
-                    modified,
-                });
-            }
-        }
-    }
-}
-
-pub(crate) fn read_pages() -> Vec<PageListing> {
-    // recursively reads PAGES_DIR and returns the pages found, with slug (path without extension), title (from filename), and modified timestamp for sorting
-    let mut pages = Vec::new();
-    let dir = std::path::Path::new(PAGES_DIR);
-    collect_pages(dir, dir, &mut pages);
-    // newest first
-    pages.sort_by(|a, b| b.modified.cmp(&a.modified));
-    pages
-}
-
 #[get("/")]
-fn index(jar: &CookieJar) -> Template {
-    let pages = read_pages();
-    // Landing content stored in pages/landing/landing.md — fall back to a default welcome.
+fn index(
+    jar: &CookieJar,
+    navigation: PageNavigation,
+    pool: &State<db::DbPool>,
+) -> Result<Template, Status> {
+    let pages = navigation.0;
     let mut landing_md = String::from(
         "# Welcome\n\nWelcome to the simple Rocket + Tera site serving Markdown pages.",
     );
-    let mut path = PathBuf::from(PAGES_DIR);
-    path.push("landing/landing.md");
-    if let Ok(s) = fs::read_to_string(&path) {
-        if !s.trim().is_empty() {
-            landing_md = s;
+    let mut conn = pool.get().map_err(page_error)?;
+    let mut metadata = None;
+    if let Some(page) =
+        page_store::by_slug(&mut conn, page_store::LANDING_SLUG).map_err(page_error)?
+    {
+        if !page.hidden || is_admin_cookie(jar) {
+            metadata = Some(page_metadata(&page, &mut conn)?);
+            landing_md = page.content;
         }
     }
     let landing_html = markdown_to_html(&landing_md);
@@ -187,10 +209,10 @@ fn index(jar: &CookieJar) -> Template {
     }
 
     let can_edit = is_admin_cookie(jar);
-    Template::render(
+    Ok(Template::render(
         "index",
-        context! { latest: latest, landing_html: landing_html, pages: pages, can_edit: can_edit },
-    )
+        context! { latest: latest, landing_html: landing_html, pages: pages, can_edit: can_edit, metadata: metadata },
+    ))
 }
 
 pub(crate) struct RemoteAddr {
@@ -231,46 +253,18 @@ fn ip(req: RemoteAddr) -> String {
     format!("{}\n", remote_ip)
 }
 
-fn render_page(slug: &str, is_admin: bool) -> Result<Template, NotFound<Template>> {
-    let mut path = PathBuf::from(PAGES_DIR);
-    path.push(format!("{}.md", slug));
-    if !path.exists() {
-        return Err(NotFound(Template::render("404", context! { slug: slug })));
-    }
-    let md = fs::read_to_string(&path)
-        .map_err(|_| NotFound(Template::render("404", context! { slug: slug })))?;
-    let html = markdown_to_html(&md);
-    // try to extract title from first heading, otherwise use slug
-    let title = md
-        .lines()
-        .find_map(|l| {
-            let t = l.trim();
-            if t.starts_with('#') {
-                Some(t.trim_start_matches('#').trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| slug.replace('-', " "));
-
-    let pages = read_pages();
-
-    // compute last-updated for this page from file metadata
-    let mut last_updated = String::new();
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if let Ok(modtime) = meta.modified() {
-            if let Ok(dur) = modtime.duration_since(SystemTime::UNIX_EPOCH) {
-                let (abs, rel) = format_modified(dur.as_secs());
-                if !abs.is_empty() {
-                    last_updated = format!("{} ({})", abs, rel);
-                }
-            }
-        }
-    }
-
+fn render_page(
+    page: page_store::Page,
+    pages: Vec<PageListing>,
+    is_admin: bool,
+    conn: &mut diesel::SqliteConnection,
+) -> Result<Template, Status> {
+    let metadata = page_metadata(&page, conn)?;
     Ok(Template::render(
         "page",
-        context! { title: title, content: html, pages: pages, last_updated: last_updated, is_admin: is_admin, slug: slug },
+        context! { title: page.title(), content: markdown_to_html(&page.content), pages: pages,
+        metadata: metadata,
+        is_admin: is_admin, slug: page.slug },
     ))
 }
 
@@ -305,6 +299,14 @@ fn unauthorized() -> Redirect {
     Redirect::to("/admin/login")
 }
 
+#[catch(404)]
+fn page_not_found(req: &Request<'_>) -> Template {
+    Template::render(
+        "404",
+        context! { slug: req.uri().path().as_str().trim_start_matches("/page/"), pages: Vec::<PageListing>::new() },
+    )
+}
+
 // Removed admin_slash redirect — Rocket routes must not duplicate paths
 
 fn listings_to_items(listings: &[PageListing]) -> Vec<PageItem> {
@@ -324,23 +326,28 @@ fn listings_to_items(listings: &[PageListing]) -> Vec<PageItem> {
 }
 
 #[get("/page")]
-fn page_root(jar: &CookieJar) -> Result<Template, NotFound<Template>> {
+fn page_root(jar: &CookieJar, navigation: PageNavigation) -> Template {
     // List pages from the root pages folder and render using the same template as /pages/
-    let mut pages = read_pages();
+    let mut pages = navigation.0;
     let all_pages = pages.clone();
     // go through pages and filter to only those in the root (no slashes in slug), then sort by modified
     pages.retain(|p| !p.slug.contains('/'));
     pages.sort_by(|a, b| b.modified.cmp(&a.modified));
     let items = listings_to_items(&pages);
     let can_edit = is_admin_cookie(jar);
-    Ok(Template::render(
+    Template::render(
         "folder",
         context! { folder: "", folder_name: "Home", pages: all_pages, items: items, can_edit: can_edit },
-    ))
+    )
 }
 
 #[get("/page/<path..>")]
-fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, NotFound<Template>> {
+fn page_catch(
+    path: PathBuf,
+    jar: &CookieJar,
+    navigation: PageNavigation,
+    pool: &State<db::DbPool>,
+) -> Result<Template, Status> {
     // join components into a slug, strip trailing ".md" and any trailing slashes
     let mut slug = path
         .iter()
@@ -356,35 +363,43 @@ fn page_catch(path: std::path::PathBuf, jar: &CookieJar) -> Result<Template, Not
     }
     if slug.is_empty() {
         // Shouldn't happen because /page is a separate route, but handle defensively
-        return Err(NotFound(Template::render("404", context! { slug: "" })));
+        return Err(Status::NotFound);
     }
-
-    // Check if slug resolves to a folder in the pages directory
-    let folder_path = PathBuf::from(PAGES_DIR).join(&slug);
-    if folder_path.is_dir() {
-        let mut folder_pages: Vec<PageListing> = Vec::new();
-        collect_pages(&folder_path, &PathBuf::from(PAGES_DIR), &mut folder_pages);
-        folder_pages.sort_by(|a, b| b.modified.cmp(&a.modified));
+    let admin = is_admin_cookie(jar);
+    let mut conn = pool.get().map_err(page_error)?;
+    if let Some(page) = page_store::by_slug(&mut conn, &slug).map_err(page_error)? {
+        if page.hidden && !admin {
+            return Err(Status::NotFound);
+        }
+        return render_page(page, navigation.0, admin, &mut conn);
+    }
+    let prefix = format!("{slug}/");
+    let folder_pages: Vec<_> = navigation
+        .0
+        .iter()
+        .filter(|p| p.slug.starts_with(&prefix))
+        .cloned()
+        .collect();
+    if !folder_pages.is_empty() {
         let items = listings_to_items(&folder_pages);
         let folder_name = slug
             .split('/')
             .last()
             .unwrap_or(slug.as_str())
             .replace('-', " ");
-        let pages = read_pages();
+        let pages = navigation.0;
         return Ok(Template::render(
             "folder",
-            context! { folder: &slug, folder_name: folder_name, pages: pages, items: items },
+            context! { folder: &slug, folder_name: folder_name, pages: pages, items: items, can_edit: admin },
         ));
     }
 
-    let admin = is_admin_cookie(jar);
-    render_page(&slug, admin)
+    Err(Status::NotFound)
 }
 
 #[get("/pages?<page>")]
-fn pages_index(page: Option<usize>) -> Template {
-    let pages = read_pages();
+fn pages_index(page: Option<usize>, navigation: PageNavigation) -> Template {
+    let pages = navigation.0;
     let total = pages.len();
     let per_page: usize = 20;
     let total_pages = if total == 0 {
@@ -425,11 +440,7 @@ async fn main() -> Result<(), rocket::Error> {
         let mut conn = pool
             .get()
             .expect("Failed to get DB connection for migrations");
-        if let Err(e) = db::run_migrations(&mut conn) {
-            eprintln!("Failed to run migrations: {}", e);
-        } else {
-            println!("Migrations applied");
-        }
+        db::run_migrations(&mut conn).expect("Failed to run migrations");
     }
 
     let fig = rocket::build()
@@ -484,11 +495,255 @@ async fn main() -> Result<(), rocket::Error> {
             ],
         )
         .mount("/static", FileServer::from(STATIC_DIR))
-        .register("/", catchers![unauthorized])
+        .register("/", catchers![unauthorized, page_not_found])
         .attach(Template::custom(|engines| {
             engines.tera.register_filter("category", category_filter);
         }));
 
     fig.launch().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod page_tests {
+    use super::*;
+    use diesel::prelude::*;
+    use rocket::http::ContentType;
+    use rocket::local::blocking::Client;
+
+    fn client() -> (Client, tempfile::TempDir, db::DbPool) {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::establish_pool(dir.path().join("test.db").to_str().unwrap());
+        {
+            let mut conn = pool.get().unwrap();
+            db::run_migrations(&mut conn).unwrap();
+            page_store::create(&mut conn, "visible", "# Visible article", "Alice", false).unwrap();
+            page_store::create(&mut conn, "drafts/secret", "# SECRET_DRAFT", "Alice", true)
+                .unwrap();
+            page_store::create(
+                &mut conn,
+                page_store::LANDING_SLUG,
+                "# SECRET_HOME",
+                "Alice",
+                true,
+            )
+            .unwrap();
+            let password_hash = bcrypt::hash("password", 4).unwrap();
+            diesel::insert_into(schema::users::table)
+                .values(models::NewUser {
+                    username: "admin",
+                    password_hash: &password_hash,
+                    role: "admin",
+                    created_at: Utc::now().timestamp(),
+                    email: None,
+                })
+                .execute(&mut conn)
+                .unwrap();
+        }
+        let app = rocket::custom(rocket::Config::debug_default())
+            .manage(pool.clone())
+            .mount(
+                "/",
+                routes![
+                    index,
+                    page_catch,
+                    page_root,
+                    pages_index,
+                    admin_login_get,
+                    admin_login_post,
+                    admin_logout,
+                    admin_index,
+                    admin_pages_new_get,
+                    admin_pages_new_post,
+                    admin_edit_page_get,
+                    admin_edit_page_post,
+                    admin_landing_get,
+                    admin_landing_post
+                ],
+            )
+            .register("/", catchers![unauthorized, page_not_found])
+            .attach(Template::custom(|engines| {
+                engines.tera.register_filter("category", category_filter);
+            }));
+        (Client::tracked(app).unwrap(), dir, pool)
+    }
+
+    fn login(client: &Client) -> String {
+        assert_eq!(
+            client
+                .post("/admin/login")
+                .header(ContentType::Form)
+                .body("username=admin&password=password")
+                .dispatch()
+                .status(),
+            Status::SeeOther
+        );
+        let response = client.get("/admin/pages/new").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        response
+            .into_string()
+            .unwrap()
+            .split("name=\"csrf\" value=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn sql_views_metadata_and_draft_visibility() {
+        let (client, _dir, _pool) = client();
+        for uri in ["/", "/pages", "/page", "/page/visible", "/page/visible.md"] {
+            let response = client.get(uri).dispatch();
+            assert_eq!(response.status(), Status::Ok, "{uri}");
+            let body = response.into_string().unwrap();
+            assert!(!body.contains("SECRET_DRAFT"), "{uri}");
+            assert!(!body.contains("SECRET_HOME"), "{uri}");
+            if uri == "/page/visible" {
+                assert!(body.contains("Created:"));
+                assert!(body.contains("by Alice"));
+                assert!(body.contains("Editors: Alice"));
+                assert!(body.contains("Last updated:"));
+            }
+        }
+        for uri in [
+            "/page/drafts/secret",
+            "/page/drafts",
+            "/admin/pages/edit/drafts/secret",
+        ] {
+            let status = client.get(uri).dispatch().status();
+            assert!(
+                status == Status::NotFound || status == Status::SeeOther,
+                "{uri}: {status}"
+            );
+        }
+        login(&client);
+        for uri in [
+            "/admin",
+            "/page/drafts",
+            "/page/drafts/secret",
+            "/admin/pages/edit/drafts/secret",
+            "/admin/landing",
+        ] {
+            let response = client.get(uri).dispatch();
+            assert_eq!(response.status(), Status::Ok, "{uri}");
+            let body = response.into_string().unwrap();
+            assert!(
+                body.contains("SECRET_DRAFT") || body.contains("SECRET_HOME"),
+                "{uri}"
+            );
+        }
+        let body = client
+            .get("/page/drafts/secret")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(body.contains("Hidden draft"));
+        let body = client
+            .get("/admin/pages/edit/drafts/secret")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(body.contains("History"));
+        assert!(body.contains("by Alice at"));
+    }
+
+    #[test]
+    fn browser_edits_history_conflicts_and_landing() {
+        let (client, _dir, pool) = client();
+        let csrf = login(&client);
+        let response = client
+            .post("/admin/pages/new")
+            .header(ContentType::Form)
+            .body(format!(
+                "slug=new-draft&content=%23+New&hidden=on&csrf={csrf}"
+            ))
+            .dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        let mut conn = pool.get().unwrap();
+        let page = page_store::by_slug(&mut conn, "new-draft")
+            .unwrap()
+            .unwrap();
+        assert!(page.hidden);
+        assert_eq!(page.creator, "admin");
+        let revision = page_store::latest_revision(&mut conn, page.id).unwrap();
+        let response = client
+            .post("/admin/pages/new")
+            .header(ContentType::Form)
+            .body(format!("slug=new-draft&content=overwrite&csrf={csrf}"))
+            .dispatch();
+        assert_eq!(response.status(), Status::Conflict);
+        let response = client
+            .post("/admin/pages/edit/new-draft")
+            .header(ContentType::Form)
+            .body(format!(
+                "content=%23+Published&revision={revision}&csrf={csrf}"
+            ))
+            .dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        assert!(!page_store::by_id(&mut conn, page.id).unwrap().hidden);
+        assert_eq!(page_store::history(&mut conn, page.id).unwrap().len(), 2);
+        let response = client
+            .post("/admin/pages/edit/new-draft")
+            .header(ContentType::Form)
+            .body(format!("content=stale&revision={revision}&csrf={csrf}"))
+            .dispatch();
+        assert_eq!(response.status(), Status::Conflict);
+        assert!(
+            response
+                .into_string()
+                .unwrap()
+                .contains("Page changed since")
+        );
+        assert_eq!(
+            page_store::by_id(&mut conn, page.id).unwrap().content,
+            "# Published"
+        );
+        assert_eq!(
+            client
+                .post("/admin/pages/edit/new-draft")
+                .header(ContentType::Form)
+                .body(format!("content=bad&revision={revision}&csrf=wrong"))
+                .dispatch()
+                .status(),
+            Status::Forbidden
+        );
+        let landing = page_store::by_slug(&mut conn, page_store::LANDING_SLUG)
+            .unwrap()
+            .unwrap();
+        let revision = page_store::latest_revision(&mut conn, landing.id).unwrap();
+        assert_eq!(
+            client
+                .post("/admin/landing")
+                .header(ContentType::Form)
+                .body(format!(
+                    "content=%23+PUBLIC_HOME&revision={revision}&csrf={csrf}"
+                ))
+                .dispatch()
+                .status(),
+            Status::SeeOther
+        );
+        assert_eq!(
+            page_store::by_id(&mut conn, landing.id).unwrap().content,
+            "# PUBLIC_HOME"
+        );
+        assert_eq!(
+            page_store::history(&mut conn, landing.id).unwrap()[0].editor,
+            "admin"
+        );
+        client.get("/admin/logout").dispatch();
+        let body = client.get("/").dispatch().into_string().unwrap();
+        assert!(body.contains("PUBLIC_HOME"));
+        assert!(!body.contains("SECRET_DRAFT"));
+        assert_eq!(
+            client.get("/page/new-draft").dispatch().status(),
+            Status::Ok
+        );
+        assert_eq!(
+            client.get("/page/drafts/secret").dispatch().status(),
+            Status::NotFound
+        );
+    }
 }

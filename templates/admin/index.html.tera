@@ -2,6 +2,12 @@
 block content %}
 <div class="container py-5">
     <h2>Admin Dashboard</h2>
+    <h3 class="mt-4">Pages</h3>
+    <ul>
+        {% for page in pages %}
+        <li><a href="/admin/pages/edit/{{ page.slug }}">#{{ page.id }} {{ page.title }}</a>{% if page.hidden %} (hidden draft){% endif %}</li>
+        {% endfor %}
+    </ul>
 
     <div class="list-group mt-4" style="max-width: 480px">
         <a

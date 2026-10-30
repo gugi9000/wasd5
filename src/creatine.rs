@@ -100,6 +100,7 @@ pub fn creatine_index(
     pool: &State<DbPool>,
     year: Option<i32>,
     month: Option<u32>,
+    navigation: crate::PageNavigation,
 ) -> Result<Template, Redirect> {
     let user_id = get_session_user_id(jar).ok_or_else(|| Redirect::to("/admin/login"))?;
 
@@ -168,7 +169,7 @@ pub fn creatine_index(
     };
 
     let csrf = crate::ensure_csrf(jar);
-    let pages = crate::read_pages();
+    let pages = navigation.0;
 
     // Total days taken this month (for a little stat).
     let days_this_month: usize = all_intakes

@@ -66,7 +66,11 @@ fn to_display(p: &models::Package) -> PackageDisplay {
 // ---------------------------------------------------------------------------
 
 #[get("/packages")]
-pub fn list_packages(jar: &CookieJar, pool: &State<DbPool>) -> Result<Template, Redirect> {
+pub fn list_packages(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
     let user_id = get_session_user_id(jar).ok_or_else(|| Redirect::to("/admin/login"))?;
 
     let username = jar
@@ -80,7 +84,7 @@ pub fn list_packages(jar: &CookieJar, pool: &State<DbPool>) -> Result<Template, 
 
     let today = Utc::now().format("%Y-%m-%d").to_string();
     let csrf = crate::ensure_csrf(jar);
-    let pages = crate::read_pages();
+    let pages = navigation.0;
 
     Ok(Template::render(
         "packages",

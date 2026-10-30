@@ -61,3 +61,26 @@ diesel::table! {
         recorded_at -> BigInt,
     }
 }
+
+diesel::table! {
+    pages (id) {
+        id -> Integer,
+        slug -> Text,
+        content -> Text,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+        creator -> Text,
+        hidden -> Bool,
+    }
+}
+
+diesel::table! {
+    page_revisions (id) {
+        id -> Integer,
+        page_id -> Integer,
+        content -> Text,
+        hidden -> Bool,
+        editor -> Text,
+        edited_at -> BigInt,
+    }
+}

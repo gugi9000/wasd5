@@ -16,8 +16,8 @@ use serde::Serialize;
 
 use crate::db::DbPool;
 use crate::models;
+use wasd5::pages as page_store;
 
-const PAGES_DIR: &str = "pages";
 const STATIC_FILES_DIR: &str = "static/files";
 const STATIC_PICTURES_DIR: &str = "static/pictures";
 
@@ -272,8 +272,8 @@ pub(crate) struct LoginForm {
 }
 
 #[get("/admin/login")]
-pub(crate) fn admin_login_get(jar: &CookieJar) -> Template {
-    let pages = crate::read_pages();
+pub(crate) fn admin_login_get(jar: &CookieJar, navigation: crate::PageNavigation) -> Template {
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Template::render("admin/login", context! { pages: pages, csrf: csrf })
 }
@@ -283,11 +283,12 @@ pub(crate) fn admin_login_post(
     form: Form<LoginForm>,
     jar: &CookieJar,
     pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
 ) -> Result<Redirect, Template> {
     use crate::schema::users::dsl::*;
     let f = form.into_inner();
     let mut conn = pool.get().map_err(|_| {
-        let pages = crate::read_pages();
+        let pages = &navigation.0;
         Template::render(
             "admin/login",
             context! { error: "DB unavailable", pages: pages },
@@ -308,7 +309,7 @@ pub(crate) fn admin_login_post(
             return Ok(Redirect::to("/admin"));
         }
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Err(Template::render(
         "admin/login",
@@ -326,11 +327,14 @@ pub(crate) fn admin_logout(jar: &CookieJar) -> Redirect {
 }
 
 #[get("/admin")]
-pub(crate) fn admin_index(jar: &CookieJar) -> Result<Template, Redirect> {
+pub(crate) fn admin_index(
+    jar: &CookieJar,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     Ok(Template::render("admin/index", context! { pages: pages }))
 }
 
@@ -338,11 +342,12 @@ pub(crate) fn admin_index(jar: &CookieJar) -> Result<Template, Redirect> {
 pub(crate) fn admin_files_get(
     jar: &CookieJar,
     warning: Option<&str>,
+    navigation: crate::PageNavigation,
 ) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     let files = list_static_assets(STATIC_FILES_DIR, "/static/files", false);
     Ok(Template::render(
@@ -356,6 +361,7 @@ pub(crate) fn admin_pictures_get(
     jar: &CookieJar,
     warning: Option<&str>,
     folder: Option<&str>,
+    navigation: crate::PageNavigation,
 ) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
@@ -368,7 +374,7 @@ pub(crate) fn admin_pictures_get(
                 return Ok(Template::render(
                     "admin/pictures",
                     context! {
-                        pages: crate::read_pages(),
+                        pages: navigation.0,
                         csrf: crate::ensure_csrf(jar),
                         pictures: Vec::<AssetItem>::new(),
                         picture_folders: Vec::<PictureFolderItem>::new(),
@@ -384,7 +390,7 @@ pub(crate) fn admin_pictures_get(
         None => String::new(),
     };
 
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
 
     let folder_path = picture_folder_fs_path(&folder);
@@ -447,11 +453,12 @@ pub(crate) fn admin_pictures_get(
 pub(crate) fn admin_calendar_settings_get(
     jar: &CookieJar,
     pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
 ) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     use crate::schema::calendar_allowed_ips::dsl as aid;
     let calendar_allowed_ips_text = if let Ok(mut conn) = pool.get() {
@@ -853,7 +860,11 @@ struct UserDisplay {
 }
 
 #[get("/admin/users")]
-pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Template, Redirect> {
+pub(crate) fn admin_users(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
@@ -889,7 +900,7 @@ pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Templ
             }
         })
         .collect();
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/users",
@@ -898,11 +909,14 @@ pub(crate) fn admin_users(jar: &CookieJar, pool: &State<DbPool>) -> Result<Templ
 }
 
 #[get("/admin/users/new")]
-pub(crate) fn admin_users_new(jar: &CookieJar) -> Result<Template, Redirect> {
+pub(crate) fn admin_users_new(
+    jar: &CookieJar,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/new_user",
@@ -997,68 +1011,131 @@ pub(crate) fn admin_users_create(
 #[derive(FromForm)]
 pub(crate) struct LandingForm {
     content: String,
+    hidden: bool,
+    revision: Option<i32>,
     csrf: Option<String>,
 }
 
 #[get("/admin/landing")]
-pub(crate) fn admin_landing_get(jar: &CookieJar) -> Result<Template, Redirect> {
+pub(crate) fn admin_landing_get(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Status> {
     if !crate::is_admin_cookie(jar) {
-        return Err(Redirect::to("/admin/login"));
+        return Err(Status::Unauthorized);
     }
-    let pages = crate::read_pages();
-    let mut landing_md = String::from("# Welcome\n\nWelcome to the site.");
-    let mut path = PathBuf::from(PAGES_DIR);
-    path.push("landing.md");
-    if let Ok(s) = fs::read_to_string(&path) {
-        landing_md = s;
-    }
+    let mut conn = pool.get().map_err(crate::page_error)?;
+    let snapshot =
+        page_store::with_history(&mut conn, page_store::LANDING_SLUG).map_err(crate::page_error)?;
+    let (page, revision) = match snapshot {
+        Some((page, history)) => {
+            let revision = history
+                .first()
+                .ok_or_else(|| crate::page_error("Page history is missing"))?
+                .id;
+            (Some(page), Some(revision))
+        }
+        None => (None, None),
+    };
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/landing_edit",
-        context! { pages: pages, content: landing_md, csrf: csrf },
+        context! { pages: navigation.0, content: page.as_ref().map(|p| p.content.as_str()).unwrap_or("# Welcome\n\nWelcome to the site."),
+        hidden: page.as_ref().is_some_and(|p| p.hidden), revision: revision, csrf: csrf },
     ))
 }
 
-#[post("/admin/landing", data = "<form>")]
-pub(crate) fn admin_landing_post(jar: &CookieJar, form: Form<LandingForm>) -> Redirect {
-    if !crate::is_admin_cookie(jar) {
-        return Redirect::to("/admin/login");
-    }
-    let f = form.into_inner();
-    if let Some(form_csrf) = f.csrf.as_ref() {
-        if let Some(cookie_csrf) = jar.get_private("csrf") {
-            if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin/landing");
-            }
-        } else {
-            return Redirect::to("/admin/landing");
-        }
+fn page_save_error(error: page_store::Error) -> (Status, String) {
+    eprintln!("Could not save page: {error}");
+    if error.is::<page_store::EditConflict>() {
+        (Status::Conflict, error.to_string())
     } else {
-        return Redirect::to("/admin/landing");
+        (
+            Status::InternalServerError,
+            "Could not save page; please try again".into(),
+        )
     }
+}
 
-    let mut path = PathBuf::from(PAGES_DIR);
-    if !path.exists() {
-        let _ = std::fs::create_dir_all(&path);
+fn check_page_edit(jar: &CookieJar, csrf: Option<&str>) -> Result<String, Status> {
+    if !crate::is_admin_cookie(jar) {
+        return Err(Status::Unauthorized);
     }
-    path.push("landing.md");
-    let _ = fs::write(&path, f.content.as_bytes());
-    Redirect::to("/")
+    if csrf.is_none() || jar.get_private("csrf").as_ref().map(|c| c.value()) != csrf {
+        return Err(Status::Forbidden);
+    }
+    jar.get_private("username")
+        .map(|c| c.value().to_string())
+        .filter(|s| !s.trim().is_empty())
+        .ok_or(Status::Unauthorized)
+}
+
+#[post("/admin/landing", data = "<form>")]
+pub(crate) fn admin_landing_post(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    form: Form<LandingForm>,
+) -> Result<Redirect, (Status, String)> {
+    let f = form.into_inner();
+    let editor = check_page_edit(jar, f.csrf.as_deref()).map_err(|s| (s, s.to_string()))?;
+    let mut conn = pool
+        .get()
+        .map_err(|e| (crate::page_error(e), "Database unavailable".into()))?;
+    match page_store::by_slug(&mut conn, page_store::LANDING_SLUG)
+        .map_err(|e| (crate::page_error(e), "Database error".into()))?
+    {
+        Some(page) => {
+            page_store::edit(
+                &mut conn,
+                page.id,
+                f.revision.ok_or((
+                    Status::Conflict,
+                    "Reopen the landing page before saving".into(),
+                ))?,
+                &f.content,
+                f.hidden,
+                &editor,
+            )
+            .map_err(page_save_error)?;
+        }
+        None => {
+            if f.revision.is_some() {
+                return Err((
+                    Status::Conflict,
+                    "The landing page no longer exists; reopen it before saving".into(),
+                ));
+            }
+            page_store::create(
+                &mut conn,
+                page_store::LANDING_SLUG,
+                &f.content,
+                &editor,
+                f.hidden,
+            )
+            .map_err(|e| (crate::page_error(e), "Could not create landing page".into()))?;
+        }
+    }
+    Ok(Redirect::to("/"))
 }
 
 #[derive(FromForm)]
 pub(crate) struct NewPageForm {
     slug: String,
     content: String,
+    hidden: bool,
     csrf: Option<String>,
 }
 
 #[get("/admin/pages/new")]
-pub(crate) fn admin_pages_new_get(jar: &CookieJar) -> Result<Template, Redirect> {
+pub(crate) fn admin_pages_new_get(
+    jar: &CookieJar,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
     if !crate::is_admin_cookie(jar) {
         return Err(Redirect::to("/admin/login"));
     }
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/new_page",
@@ -1067,62 +1144,37 @@ pub(crate) fn admin_pages_new_get(jar: &CookieJar) -> Result<Template, Redirect>
 }
 
 #[post("/admin/pages/new", data = "<form>")]
-pub(crate) fn admin_pages_new_post(jar: &CookieJar, form: Form<NewPageForm>) -> Redirect {
-    if !crate::is_admin_cookie(jar) {
-        return Redirect::to("/admin/login");
-    }
+pub(crate) fn admin_pages_new_post(
+    jar: &CookieJar,
+    pool: &State<DbPool>,
+    form: Form<NewPageForm>,
+) -> Result<Redirect, (Status, String)> {
     let f = form.into_inner();
-    if let Some(form_csrf) = f.csrf.as_ref() {
-        if let Some(cookie_csrf) = jar.get_private("csrf") {
-            if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin/pages/new");
-            }
-        } else {
-            return Redirect::to("/admin/pages/new");
-        }
-    } else {
-        return Redirect::to("/admin/pages/new");
+    let editor = check_page_edit(jar, f.csrf.as_deref()).map_err(|s| (s, s.to_string()))?;
+    let slug =
+        page_store::normalize_slug(&f.slug).map_err(|e| (Status::BadRequest, e.to_string()))?;
+    let mut conn = pool
+        .get()
+        .map_err(|e| (crate::page_error(e), "Database unavailable".into()))?;
+    if page_store::by_slug(&mut conn, &slug)
+        .map_err(|e| (crate::page_error(e), "Database error".into()))?
+        .is_some()
+    {
+        return Err((
+            Status::Conflict,
+            "A page with that slug already exists".into(),
+        ));
     }
-
-    let mut slug = f.slug.trim().to_string();
-    if slug.ends_with('/') {
-        slug.pop();
-    }
-    if slug.ends_with(".md") {
-        slug = slug.trim_end_matches(".md").to_string();
-    }
-    if slug.is_empty() {
-        return Redirect::to("/admin/pages/new");
-    }
-    if slug.contains("..") {
-        return Redirect::to("/admin/pages/new");
-    }
-
-    slug = slug
-        .split('/')
-        .map(|s| s.trim().replace(' ', "-"))
-        .collect::<Vec<_>>()
-        .join("/");
-
-    let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') {
-        page_path.push(comp);
-    }
-    if let Some(parent) = page_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    page_path.set_extension("md");
-
-    if fs::write(&page_path, f.content.as_bytes()).is_err() {
-        return Redirect::to("/admin/pages/new");
-    }
-
-    Redirect::to(format!("/admin/pages/edit/{}", slug))
+    page_store::create(&mut conn, &slug, &f.content, &editor, f.hidden)
+        .map_err(|e| (crate::page_error(e), "Could not create page".into()))?;
+    Ok(Redirect::to(format!("/admin/pages/edit/{}", slug)))
 }
 
 #[derive(FromForm)]
 pub(crate) struct EditPageForm {
     content: String,
+    hidden: bool,
+    revision: i32,
     csrf: Option<String>,
 }
 
@@ -1130,9 +1182,11 @@ pub(crate) struct EditPageForm {
 pub(crate) fn admin_edit_page_get(
     path: std::path::PathBuf,
     jar: &CookieJar,
-) -> Result<Template, Redirect> {
+    pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Status> {
     if !crate::is_admin_cookie(jar) {
-        return Err(Redirect::to("/admin/login"));
+        return Err(Status::Unauthorized);
     }
     let mut slug = path
         .iter()
@@ -1143,19 +1197,22 @@ pub(crate) fn admin_edit_page_get(
         slug.pop();
     }
     if slug.is_empty() {
-        return Err(Redirect::to("/admin"));
+        return Err(Status::BadRequest);
     }
-    let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') {
-        page_path.push(comp);
-    }
-    page_path.set_extension("md");
-    let content = fs::read_to_string(&page_path).unwrap_or_else(|_| String::new());
-    let pages = crate::read_pages();
+    let mut conn = pool.get().map_err(crate::page_error)?;
+    let (page, history) = page_store::with_history(&mut conn, &slug)
+        .map_err(crate::page_error)?
+        .ok_or(Status::NotFound)?;
+    let revision = history
+        .first()
+        .ok_or_else(|| crate::page_error("Page history is missing"))?
+        .id;
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "admin/edit_page",
-        context! { pages: pages, slug: slug, content: content, csrf: csrf },
+        context! { pages: navigation.0, slug: slug, content: page.content, hidden: page.hidden,
+        revision: revision,
+        history: history, csrf: csrf },
     ))
 }
 
@@ -1164,49 +1221,26 @@ pub(crate) fn admin_edit_page_post(
     path: std::path::PathBuf,
     jar: &CookieJar,
     form: Form<EditPageForm>,
-) -> Redirect {
-    if !crate::is_admin_cookie(jar) {
-        return Redirect::to("/admin/login");
-    }
+    pool: &State<DbPool>,
+) -> Result<Redirect, (Status, String)> {
     let f = form.into_inner();
-    if let Some(form_csrf) = f.csrf.as_ref() {
-        if let Some(cookie_csrf) = jar.get_private("csrf") {
-            if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin");
-            }
-        } else {
-            return Redirect::to("/admin");
-        }
-    } else {
-        return Redirect::to("/admin");
-    }
-
-    let mut slug = path
+    let editor = check_page_edit(jar, f.csrf.as_deref()).map_err(|s| (s, s.to_string()))?;
+    let slug = path
         .iter()
         .map(|s| s.to_string_lossy())
         .collect::<Vec<_>>()
         .join("/");
-    while slug.ends_with('/') {
-        slug.pop();
-    }
-    if slug.is_empty() {
-        return Redirect::to("/admin");
-    }
-
-    let mut page_path = PathBuf::from(PAGES_DIR);
-    for comp in slug.split('/') {
-        page_path.push(comp);
-    }
-    if let Some(parent) = page_path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    page_path.set_extension("md");
-
-    if fs::write(&page_path, f.content.as_bytes()).is_err() {
-        return Redirect::to(format!("/admin/pages/edit/{}", slug));
-    }
-
-    Redirect::to(format!("/page/{}", slug))
+    let mut conn = pool
+        .get()
+        .map_err(|e| (crate::page_error(e), "Database unavailable".into()))?;
+    let page = page_store::by_slug(&mut conn, &slug)
+        .map_err(|e| (crate::page_error(e), "Database error".into()))?
+        .ok_or((Status::NotFound, "Page not found".into()))?;
+    page_store::edit(
+        &mut conn, page.id, f.revision, &f.content, f.hidden, &editor,
+    )
+    .map_err(page_save_error)?;
+    Ok(Redirect::to(format!("/page/{}", slug)))
 }
 
 #[derive(Deserialize)]

@@ -9,10 +9,16 @@
   {% endif %}
   <form method="post" action="/admin/landing">
     <input type="hidden" name="csrf" value="{{ csrf }}" />
+    {% if revision %}<input type="hidden" name="revision" value="{{ revision }}" />{% endif %}
     <div class="mb-3">
       <label class="form-label">Content (Markdown)</label>
-      <textarea class="form-control" name="content" rows="12">{{ content | safe }}</textarea>
+      <textarea class="form-control" name="content" rows="12">{{ content }}</textarea>
     </div>
+    <div class="form-check mb-3">
+      <input id="hidden" name="hidden" type="checkbox" class="form-check-input" {% if hidden %}checked{% endif %} />
+      <label for="hidden" class="form-check-label">Hidden draft (admins only)</label>
+    </div>
+    <p>View the landing page's <a href="/admin/pages/edit/landing/landing">revision history</a>.</p>
     <div>
       <button class="btn btn-primary" type="submit">Save</button>
       <a class="btn btn-link" href="/">Preview</a>

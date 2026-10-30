@@ -13,8 +13,20 @@
       <textarea id="content" name="content" rows="16" class="form-control">{{ content }}</textarea>
     </div>
     <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <input type="hidden" name="revision" value="{{ revision }}" />
+    <div class="form-check mb-3">
+      <input id="hidden" name="hidden" type="checkbox" class="form-check-input" {% if hidden %}checked{% endif %} />
+      <label for="hidden" class="form-check-label">Hidden draft (admins only)</label>
+    </div>
     <button class="btn btn-primary">Save</button>
     <a class="btn btn-secondary ms-2" href="/page/{{ slug }}">Cancel</a>
   </form>
+  <h4 class="mt-4">History</h4>
+  {% for entry in history %}
+    <details class="mb-2">
+      <summary>Revision {{ entry.id }} by {{ entry.editor }} at {{ entry.edited_at | date(format="%Y-%m-%d %H:%M:%S UTC") }}{% if entry.hidden %} (hidden){% endif %}</summary>
+      <pre class="border p-2">{{ entry.content }}</pre>
+    </details>
+  {% endfor %}
   <a href="https://pulldown-cmark.github.io/pulldown-cmark/cheat-sheet.html">Pulldown CMark Cheatsheet</a>
 {% endblock content %}

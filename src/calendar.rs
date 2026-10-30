@@ -43,6 +43,7 @@ pub fn calendar_index(
     jar: &CookieJar,
     pool: &State<DbPool>,
     remote: crate::RemoteAddr,
+    navigation: crate::PageNavigation,
 ) -> Result<Template, Redirect> {
     if !can_access_calendar(jar, pool, &remote) {
         return Err(Redirect::to("/admin/login"));
@@ -61,7 +62,7 @@ pub fn calendar_index(
     let start_str = start_date.format("%Y-%m-%d").to_string();
     let end_str = end_date.format("%Y-%m-%d").to_string();
 
-    let pages = crate::read_pages();
+    let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Ok(Template::render(
         "calendar",

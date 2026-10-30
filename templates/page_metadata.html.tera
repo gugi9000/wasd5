@@ -1,0 +1,6 @@
+<div class="fs-6 text-muted">
+  <p class="mb-0">Created: {{ metadata.created_at }} by {{ metadata.creator }}</p>
+  <p class="mb-0">Last updated: {{ metadata.last_updated }}</p>
+  <p class="mb-0">Editors: {{ metadata.editors | join(sep=", ") }}</p>
+  {% if metadata.hidden %}<span class="badge bg-warning text-dark">Hidden draft</span>{% endif %}
+</div>
