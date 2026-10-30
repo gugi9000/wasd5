@@ -136,6 +136,7 @@ fn page_metadata(
 fn markdown_to_html(md: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_TASKLISTS);
     let parser = Parser::new_ext(md, options);
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
@@ -607,6 +608,30 @@ mod page_tests {
             .next()
             .unwrap()
             .to_string()
+    }
+
+    #[test]
+    fn markdown_task_lists_render_on_articles_and_homepage() {
+        let markdown = "# Tasks\r\n\r\n - [ ] Unfinished task\r\n - [x] Finished task\r\n";
+        let html = markdown_to_html(markdown);
+        assert!(html.contains("<input disabled=\"\" type=\"checkbox\"/>"));
+        assert!(html.contains("<input disabled=\"\" type=\"checkbox\" checked=\"\"/>"));
+        assert!(!html.contains("[ ]"));
+        assert!(!html.contains("[x]"));
+        assert_eq!(markdown_to_html("- Ordinary item\n"), "<ul>\n<li>Ordinary item</li>\n</ul>\n");
+        assert!(markdown_to_html("| A | B |\n| --- | --- |\n| 1 | 2 |\n").contains("<table>"));
+
+        let (client, _dir, pool) = client();
+        let mut conn = pool.get().unwrap();
+        let landing = page_store::by_slug(&mut conn, page_store::LANDING_SLUG).unwrap().unwrap();
+        let revision = page_store::latest_revision(&mut conn, landing.id).unwrap();
+        page_store::edit(&mut conn, landing.id, revision, markdown, false, "Alice").unwrap();
+        for uri in ["/", "/page/landing/landing"] {
+            let response = client.get(uri).dispatch();
+            assert_eq!(response.status(), Status::Ok);
+            let body = response.into_string().unwrap();
+            assert!(body.contains(&html), "{uri}");
+        }
     }
 
     #[test]

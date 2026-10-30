@@ -94,6 +94,10 @@ drafts are only visible to signed-in admins, including by direct URL. The
 dashboard lists drafts so they can be found and published. Browser edits use
 the signed-in username for attribution.
 
+Markdown articles and homepage content support tables and task lists.
+Use `- [ ] Task` for an unchecked box and `- [x] Task` for a checked box.
+These boxes are read-only; change their state by editing the Markdown.
+
 ## Page management CLI
 
 ```bash
