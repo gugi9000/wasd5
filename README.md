@@ -43,9 +43,35 @@ both `DATABASE_URL` and `COMICS_DIR` in production and back them up together
 while uploads are stopped. Deploying only the executable/database is not enough
 to preserve images.
 
+## Fitness timers
+
+The Health menu's Fitness timers link opens the public library at `/health/timer`.
+Signed-in users can build and save public workouts; anyone can run them without
+an account. Share a workout's `/health/timer/<id>` link. Only its owner or an
+admin can edit or delete it. Accounts use the existing admin user tools.
+Timers are stored in SQLite and the migration runs automatically at startup.
+
+The builder includes EMOM X (X one-minute intervals), Tabata (20 seconds work /
+10 seconds rest, initially 8 rounds), and Custom presets. Applying a preset
+replaces the current steps. Custom workouts support timed steps, manual rest
+steps, step repeats, repeatable groups, and whole-workout repeats. Steps and
+groups can be reordered. All durations are in seconds. Repeats range from 1-100;
+each workout allows up to 50 groups, 50 steps per group, and 10,000 expanded steps.
+
+Start, pause/resume, and restart using the player buttons. Manual steps wait
+indefinitely for Continue, Space, or Enter. Space/Enter also starts or pauses
+when no interactive control has keyboard focus. Playback is local to each
+visitor and does not change the saved timer. The player uses elapsed time
+rather than counting ticks; late browser callbacks catch up timed intervals but
+never skip a manual rest. Keep the page open and the device awake: browsers may
+throttle background tabs or suspend pages during sleep. No audio cues are played.
+
+Validate the timer engine with `node --test tests/fitness-core.test.cjs` and the
+library routes with `cargo test --bin wasd5 fitness`.
+
 ## Breathing guide
 
-The Health menu links to `/tools/box-breathing`, an interactive tool with
+The Health menu links to `/health/box-breathing`, an interactive tool with
 a four-second-per-edge box pattern and a 4-7-8 triangle. The triangle's dot
 moves continuously: inhale along one edge for 4 seconds, hold along the next
 for 7, and exhale along the last for 8, with no extra pauses. Both patterns

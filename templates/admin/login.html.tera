@@ -1,7 +1,7 @@
 {% extends "base" %}
 {% block content %}
 <div class="container py-5">
-  <h2>{% if next == "comics" %}Sign in to Comics{% else %}Admin Login{% endif %}</h2>
+  <h2>{% if next == "comics" %}Sign in to Comics{% elif next == "fitness" %}Sign in to Fitness timers{% else %}Admin Login{% endif %}</h2>
   {% if error %}
   <div class="alert alert-danger">{{ error }}</div>
   {% endif %}
@@ -16,6 +16,7 @@
     </div>
     <input type="hidden" name="csrf" value="{{ csrf | default(value="") }}" />
     {% if next == "comics" %}<input type="hidden" name="next" value="comics" />{% endif %}
+    {% if next == "fitness" %}<input type="hidden" name="next" value="fitness" />{% endif %}
     <button class="btn btn-primary" type="submit">Login</button>
   </form>
 </div>

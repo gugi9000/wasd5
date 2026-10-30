@@ -1,0 +1,33 @@
+{% extends "base" %}
+{% block title %}{{ timer.title }}{% endblock title %}
+{% block content %}
+<link rel="stylesheet" href="/static/fitness.css" />
+<div id="timer-player" data-id="{{ timer.id }}">
+<a href="/health/timer">All fitness timers</a>
+<h1 class="text-break">{{ timer.title }}</h1>
+<p class="text-break" style="white-space: pre-wrap">{{ timer.description }}</p>
+<div id="timer-error" class="alert alert-danger" role="alert" hidden></div>
+<div class="card text-center mb-3"><div class="card-body">
+    <p id="timer-progress">Loading workout...</p>
+    <h2 id="timer-label" class="text-break" aria-live="polite">Ready</h2>
+    <div id="timer-clock" class="timer-clock" role="timer" aria-label="Time remaining">--:--</div>
+    <p id="timer-status" role="status">Loading...</p>
+    <p id="timer-next" class="text-body-secondary text-break"></p>
+    <div class="d-flex flex-wrap gap-2 justify-content-center">
+        <button id="timer-toggle" class="btn btn-primary btn-lg" disabled>Start</button>
+        <button id="timer-continue" class="btn btn-success btn-lg" hidden>Continue</button>
+        <button id="timer-restart" class="btn btn-outline-secondary" disabled>Restart</button>
+    </div>
+</div></div>
+<p>Space or Enter starts/pauses the timer, or continues a manual rest. Keyboard shortcuts do not override focused buttons or fields. Keep this page open; device sleep and background browser throttling can delay cues.</p>
+<details class="mb-4"><summary>Workout steps</summary><ol id="timer-outline"></ol></details>
+{% if can_manage %}
+<div class="d-flex gap-2 mb-5">
+    <a class="btn btn-outline-primary" href="/health/timer/{{ timer.id }}/edit">Edit timer</a>
+    <button id="delete-timer" class="btn btn-outline-danger" data-csrf="{{ csrf }}">Delete timer</button>
+</div>
+{% endif %}
+</div>
+<script src="/static/fitness-core.js"></script>
+<script src="/static/fitness-player.js"></script>
+{% endblock content %}

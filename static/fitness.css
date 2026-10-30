@@ -1,0 +1,11 @@
+.timer-clock {
+    font-size: clamp(3rem, 12vw, 7rem);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+.repeat-input { max-width: 9rem; }
+.timer-step {
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+}

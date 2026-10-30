@@ -1,0 +1,39 @@
+{% extends "base" %}
+{% block title %}Build a fitness timer{% endblock title %}
+{% block content %}
+<link rel="stylesheet" href="/static/fitness.css" />
+<div id="timer-editor" data-id="{{ timer_id | default(value="") }}">
+<a href="/health/timer">All fitness timers</a>
+<h1>{% if timer_id %}Edit timer{% else %}Build a timer{% endif %}</h1>
+<p>All saved timers are public. Repeat steps, groups, or the whole workout. Manual steps wait for a button or key press.</p>
+<div id="timer-error" class="alert alert-danger" role="alert" hidden></div>
+<fieldset id="editor-fields" disabled>
+<div class="card mb-3"><div class="card-body">
+    <label class="form-label" for="preset">Start from a preset</label>
+    <select id="preset" class="form-select mb-2">
+        <option value="custom">Custom</option><option value="emom">EMOM X</option><option value="tabata">Tabata</option>
+    </select>
+    <div class="row g-2 align-items-end">
+        <div class="col-sm-6"><label for="preset-rounds" class="form-label">Rounds / minutes (EMOM)</label>
+        <input id="preset-rounds" type="number" min="1" max="100" value="10" class="form-control" /></div>
+        <div class="col-sm-6"><button id="apply-preset" class="btn btn-outline-primary" type="button">Apply preset</button></div>
+    </div>
+    <p class="small mt-2 mb-0">EMOM: a new 60-second interval each minute. Tabata: 20 seconds work / 10 seconds rest, 8 rounds by default. Applying a preset replaces the steps below.</p>
+</div></div>
+<form id="timer-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <div class="mb-3"><label for="timer-title" class="form-label">Title</label>
+    <input id="timer-title" class="form-control" required maxlength="100" /></div>
+    <div class="mb-3"><label for="timer-description" class="form-label">Description (optional)</label>
+    <textarea id="timer-description" class="form-control" maxlength="2000" rows="2"></textarea></div>
+    <div class="mb-3"><label for="workout-repeats" class="form-label">Repeat whole workout</label>
+    <input id="workout-repeats" class="form-control repeat-input" type="number" min="1" max="100" required value="1" /></div>
+    <div id="timer-blocks"></div>
+    <button id="add-block" class="btn btn-outline-secondary mb-3" type="button">Add group</button>
+    <div class="mb-5"><button id="save-timer" class="btn btn-primary" type="submit">Save public timer</button></div>
+</form>
+</fieldset>
+</div>
+<script src="/static/fitness-core.js"></script>
+<script src="/static/fitness-editor.js"></script>
+{% endblock content %}

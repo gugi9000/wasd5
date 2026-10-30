@@ -49,7 +49,7 @@ pub fn routes() -> Vec<rocket::Route> {
     ]
 }
 
-pub struct Private<T>(T);
+pub struct Private<T>(pub(crate) T);
 
 impl<'r, T: Responder<'r, 'static>> Responder<'r, 'static> for Private<T> {
     fn respond_to(self, request: &'r Request<'_>) -> response::Result<'static> {
@@ -111,6 +111,10 @@ impl<'r> FromRequest<'r> for Viewer {
 }
 
 impl Viewer {
+    pub(crate) fn identity(&self) -> Option<(i32, bool)> {
+        self.0.as_ref().map(|user| (user.id, user.admin))
+    }
+
     fn user(&self) -> Result<&ComicUser, ComicError> {
         self.0
             .as_ref()

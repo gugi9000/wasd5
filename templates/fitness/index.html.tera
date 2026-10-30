@@ -1,0 +1,22 @@
+{% extends "base" %}
+{% block title %}Fitness timers{% endblock title %}
+{% block content %}
+<h1>Fitness timers</h1>
+<p>Build a workout once, share its link, and let anyone run it. Saved timers are public.</p>
+{% if signed_in %}
+<a class="btn btn-primary mb-4" href="/health/timer/new">Build a timer</a>
+{% else %}
+<a class="btn btn-primary mb-4" href="/admin/login?next=fitness">Sign in to build a timer</a>
+{% endif %}
+<h2 class="h4">Shared workouts</h2>
+<div class="row g-3 mb-5">
+{% for timer in timers %}
+<div class="col-md-6"><article class="card h-100"><div class="card-body">
+    <h3 class="h5 text-break"><a href="/health/timer/{{ timer.id }}">{{ timer.title }}</a></h3>
+    <p class="mb-0 text-break" style="white-space: pre-wrap">{{ timer.description }}</p>
+</div></article></div>
+{% else %}
+<p>No workouts yet. Create an EMOM, Tabata, or your own custom timer.</p>
+{% endfor %}
+</div>
+{% endblock content %}

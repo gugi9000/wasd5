@@ -282,7 +282,7 @@ pub(crate) fn admin_login_get(
     let csrf = crate::ensure_csrf(jar);
     Template::render(
         "admin/login",
-        context! { pages: pages, csrf: csrf, next: next.filter(|value| *value == "comics") },
+        context! { pages: pages, csrf: csrf, next: next.filter(|value| matches!(*value, "comics" | "fitness")) },
     )
 }
 
@@ -314,10 +314,10 @@ pub(crate) fn admin_login_post(
             jar.add_private(Cookie::new("user_role", u.role.clone()));
             let expiry = Utc::now().timestamp() + 24 * 3600;
             jar.add_private(Cookie::new("session_expires", expiry.to_string()));
-            return Ok(Redirect::to(if f.next.as_deref() == Some("comics") {
-                "/comics"
-            } else {
-                "/admin"
+            return Ok(Redirect::to(match f.next.as_deref() {
+                Some("comics") => "/comics",
+                Some("fitness") => "/health/timer",
+                _ => "/admin",
             }));
         }
     }
@@ -325,7 +325,7 @@ pub(crate) fn admin_login_post(
     let csrf = crate::ensure_csrf(jar);
     Err(Template::render(
         "admin/login",
-        context! { error: "Invalid credentials", pages: pages, csrf: csrf, next: f.next.filter(|value| value == "comics") },
+        context! { error: "Invalid credentials", pages: pages, csrf: csrf, next: f.next.filter(|value| matches!(value.as_str(), "comics" | "fitness")) },
     ))
 }
 

@@ -23,6 +23,7 @@ mod calendar;
 mod comics;
 mod creatine;
 mod db;
+mod fitness;
 mod helpers;
 mod models;
 mod packages;
@@ -255,7 +256,7 @@ fn ip(req: RemoteAddr) -> String {
     format!("{}\n", remote_ip)
 }
 
-#[get("/tools/box-breathing")]
+#[get("/health/box-breathing")]
 fn box_breathing(navigation: PageNavigation) -> Template {
     Template::render("box_breathing", context! { pages: navigation.0 })
 }
@@ -461,6 +462,7 @@ async fn main() -> Result<(), rocket::Error> {
             .expect("Failed to initialize comics image storage"),
         )
         .mount("/", comics::routes())
+        .mount("/", fitness::routes())
         .mount(
             "/",
             routes![
@@ -637,11 +639,12 @@ mod page_tests {
     #[test]
     fn breathing_tool_and_health_menu() {
         let (client, _dir, _pool) = client();
-        let response = client.get("/tools/box-breathing").dispatch();
+        let response = client.get("/health/box-breathing").dispatch();
         assert_eq!(response.status(), Status::Ok);
         let body = response.into_string().unwrap();
         assert!(body.contains("Health"));
-        assert!(body.contains("href=\"/tools/box-breathing\""));
+        assert!(body.contains("href=\"/health/box-breathing\""));
+        assert!(body.contains("href=\"/health/timer\""));
         assert!(body.contains("Box breathing"));
         assert!(body.contains("Box (4-4-4-4)"));
         assert!(body.contains("4-7-8 triangular breathing guide"));

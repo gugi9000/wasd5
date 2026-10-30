@@ -162,7 +162,10 @@
                             </a>
                             <ul class="dropdown-menu">
                                 <li>
-                                    <a class="dropdown-item" href="/tools/box-breathing">Box breathing</a>
+                                    <a class="dropdown-item" href="/health/box-breathing">Box breathing</a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="/health/timer">Fitness timers</a>
                                 </li>
                             </ul>
                         </li>

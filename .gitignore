@@ -5,3 +5,7 @@ pages/
 /static/*
 !/static/box-breathing.css
 !/static/box-breathing.js
+!/static/fitness.css
+!/static/fitness-core.js
+!/static/fitness-editor.js
+!/static/fitness-player.js

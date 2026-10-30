@@ -99,6 +99,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    fitness_timers (id) {
+        id -> Integer,
+        owner_id -> Integer,
+        title -> Text,
+        description -> Text,
+        workout -> Text,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+    }
+}
+
+diesel::table! {
     comic_strips (id) {
         id -> Integer,
         album_id -> Integer,
