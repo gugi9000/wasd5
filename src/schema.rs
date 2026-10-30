@@ -124,6 +124,7 @@ diesel::table! {
         flags -> Text,
         user_id -> Nullable<Integer>,
         started_at -> BigInt,
+        created_at -> BigInt,
         status -> Text,
         elapsed_ms -> Nullable<BigInt>,
     }

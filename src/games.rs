@@ -30,6 +30,7 @@ struct Game {
     flags: String,
     user_id: Option<i32>,
     started_at: i64,
+    created_at: i64,
     status: String,
     elapsed_ms: Option<i64>,
 }
@@ -47,6 +48,7 @@ struct NewGame<'a> {
     flags: &'a str,
     user_id: Option<i32>,
     started_at: i64,
+    created_at: i64,
     status: &'a str,
     elapsed_ms: Option<i64>,
 }
@@ -80,6 +82,7 @@ struct GameView {
     cells: Vec<Cell>,
     status: String,
     elapsed_ms: Option<i64>,
+    clock_started: bool,
 }
 
 #[derive(Deserialize)]
@@ -273,6 +276,7 @@ fn game_view(game: &Game) -> GameResult<GameView> {
         cells,
         status: game.status.clone(),
         elapsed_ms: game.elapsed_ms,
+        clock_started: game.started_at > 0,
     })
 }
 
@@ -336,14 +340,19 @@ fn start(
         revealed: &blank_json,
         flags: &blank_json,
         user_id,
-        started_at: chrono::Utc::now().timestamp_millis(),
+        started_at: 0,
+        created_at: chrono::Utc::now().timestamp_millis(),
         status: "playing",
         elapsed_ms: None,
     };
     let mut conn = pool.get().map_err(internal)?;
     diesel::delete(
-        games::table
-            .filter(games::started_at.lt(chrono::Utc::now().timestamp_millis() - 86_400_000)),
+        games::table.filter(
+            diesel::dsl::sql::<diesel::sql_types::BigInt>(
+                "COALESCE(NULLIF(started_at, 0), created_at)",
+            )
+            .lt(chrono::Utc::now().timestamp_millis() - 86_400_000),
+        ),
     )
     .execute(&mut conn)
     .map_err(internal)?;
@@ -378,6 +387,9 @@ fn play(
         .optional()
         .map_err(internal)?
         .ok_or((Status::NotFound, "Game not found or expired.".into()))?;
+    if game.created_at < chrono::Utc::now().timestamp_millis() - 86_400_000 {
+        return Err((Status::NotFound, "Game not found or expired.".into()));
+    }
     if game.user_id != viewer.identity().map(|(id, _)| id) {
         return Err((
             Status::Forbidden,
@@ -400,6 +412,10 @@ fn play(
     }
     if game.status != "playing" {
         return Ok(Private(Json(game_view(&game)?)));
+    }
+    let original_started_at = game.started_at;
+    if game.started_at == 0 {
+        game.started_at = chrono::Utc::now().timestamp_millis();
     }
     let index = request.row * columns + request.column;
     let (mut mines, mut revealed, mut flags) = deserialize_state(&game)?;
@@ -460,6 +476,7 @@ fn play(
         games::table
             .filter(games::id.eq(&id))
             .filter(games::status.eq("playing"))
+            .filter(games::started_at.eq(original_started_at))
             .filter(games::mines.eq(original_mines))
             .filter(games::revealed.eq(original_revealed))
             .filter(games::flags.eq(original_flags)),
@@ -468,6 +485,7 @@ fn play(
         games::mines.eq(&game.mines),
         games::revealed.eq(&game.revealed),
         games::flags.eq(&game.flags),
+        games::started_at.eq(game.started_at),
         games::status.eq(&game.status),
         games::elapsed_ms.eq(elapsed),
     ))
@@ -641,6 +659,14 @@ mod tests {
         );
         assert_eq!(view["rows"], 9);
         assert_eq!(view["columns"], 9);
+        assert_eq!(
+            games::table
+                .find(&id)
+                .select(games::started_at)
+                .first::<i64>(&mut pool.get().unwrap())
+                .unwrap(),
+            0
+        );
 
         let mines: Vec<bool> = serde_json::from_str(
             &games::table
@@ -667,6 +693,15 @@ mod tests {
         assert_eq!(first_move.status(), Status::Ok);
         let first_view: serde_json::Value = first_move.into_json().unwrap();
         assert_eq!(first_view["status"], "playing");
+        assert_eq!(first_view["clock_started"], true);
+        assert!(
+            games::table
+                .find(&id)
+                .select(games::started_at)
+                .first::<i64>(&mut pool.get().unwrap())
+                .unwrap()
+                > 0
+        );
         assert!(
             first_view["cells"][first_mine]["revealed"]
                 .as_bool()

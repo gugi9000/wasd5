@@ -17,7 +17,7 @@
     const scoreMessage = document.getElementById("score-message");
     const flagModeButton = document.getElementById("flag-mode");
     let game = null;
-    let startedAt = 0;
+    let startedAt = null;
     let timer = null;
     let busy = false;
     let flagMode = false;
@@ -187,6 +187,14 @@
 
     async function move(action, index) {
         if (!game || busy || game.status !== "playing") return;
+        if (startedAt === null) {
+            startedAt = Date.now();
+            timer = setInterval(() => {
+                if (game?.clock_started && game.status === "playing") {
+                    timeLabel.textContent = elapsedText(Date.now() - startedAt);
+                }
+            }, 100);
+        }
         const row = Math.floor(index / game.columns);
         const column = index % game.columns;
         const checkedCells = action === "chord"
@@ -225,6 +233,8 @@
         busy = true;
         newGameButton.disabled = true;
         clearInterval(timer);
+        timer = null;
+        startedAt = null;
         game = null;
         drawBoard();
         scoreSent = false;
@@ -240,14 +250,8 @@
         }
         try {
             game = await request("/games/minesweeper/api/games", body);
-            startedAt = Date.now();
             setStatus("Good luck! Left-click to reveal, right-click to flag, middle-click to chord.");
             drawBoard();
-            timer = setInterval(() => {
-                if (game?.status === "playing") {
-                    timeLabel.textContent = elapsedText(Date.now() - startedAt);
-                }
-            }, 100);
         } catch (error) {
             setStatus(error.message);
             drawBoard();
