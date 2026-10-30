@@ -48,6 +48,19 @@
         return `${(ms / 1000).toFixed(1)} s`;
     }
 
+    function flashCells(indices) {
+        for (const index of indices) {
+            const button = boardHost.querySelector(`button[data-index="${index}"]`);
+            if (!button) continue;
+            button.classList.remove("checking");
+            void button.offsetWidth;
+            button.classList.add("checking");
+            button.addEventListener("animationend", () => {
+                button.classList.remove("checking");
+            }, { once: true });
+        }
+    }
+
     function drawBoard() {
         if (!game) {
             boardHost.replaceChildren();
@@ -176,6 +189,15 @@
         if (!game || busy || game.status !== "playing") return;
         const row = Math.floor(index / game.columns);
         const column = index % game.columns;
+        const checkedCells = action === "chord"
+            ? game.cells
+                .map((_, cellIndex) => cellIndex)
+                .filter((cellIndex) => {
+                    const r = Math.floor(cellIndex / game.columns);
+                    const c = cellIndex % game.columns;
+                    return Math.max(Math.abs(r - row), Math.abs(c - column)) === 1;
+                })
+            : [];
         busy = true;
         drawBoard();
         try {
@@ -193,6 +215,7 @@
         } finally {
             busy = false;
             drawBoard();
+            if (checkedCells.length) flashCells(checkedCells);
         }
     }
 

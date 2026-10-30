@@ -29,6 +29,47 @@
     background: #f1f5f9;
 }
 
+.minesweeper-cell.checking {
+    animation: minesweeper-check 550ms ease-out;
+}
+
+@keyframes minesweeper-check {
+    0%, 100% {
+        box-shadow: inset 0 0 0 0 transparent;
+        filter: brightness(1);
+        transform: scale(1);
+    }
+    35% {
+        box-shadow: inset 0 0 0 4px #f59e0b;
+        filter: brightness(1.3);
+        transform: scale(0.88);
+    }
+}
+
+[data-bs-theme="dark"] .minesweeper-cell {
+    border-color: #475569;
+    background: #334155;
+    color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] .minesweeper-cell.revealed {
+    border-color: #475569;
+    background: #172033;
+}
+
+[data-bs-theme="dark"] .minesweeper-cell.mine-hit {
+    background: #7f1d1d;
+}
+
+[data-bs-theme="dark"] .number-1 { color: #60a5fa; }
+[data-bs-theme="dark"] .number-2 { color: #4ade80; }
+[data-bs-theme="dark"] .number-3 { color: #f87171; }
+[data-bs-theme="dark"] .number-4 { color: #c4b5fd; }
+[data-bs-theme="dark"] .number-5 { color: #fbbf24; }
+[data-bs-theme="dark"] .number-6 { color: #67e8f9; }
+[data-bs-theme="dark"] .number-7 { color: #f1f5f9; }
+[data-bs-theme="dark"] .number-8 { color: #cbd5e1; }
+
 .minesweeper-cell.mine-hit {
     background: #fca5a5;
 }
@@ -64,5 +105,11 @@
         width: 28px;
         height: 28px;
         line-height: 24px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .minesweeper-cell.checking {
+        animation-duration: 1ms;
     }
 }
