@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use crate::comics::Private;
 use crate::db::DbPool;
-use crate::schema::{cards_elemental_games as games, cards_elemental_online_games as online_games};
+use crate::schema::{
+    cards_elemental_games as games, cards_elemental_online_games as online_games,
+    cards_elemental_stats as stats,
+};
 
 type GameError = (Status, String);
 type GameResult<T> = Result<T, GameError>;
@@ -26,7 +29,8 @@ pub fn routes() -> Vec<rocket::Route> {
         open_online_games,
         join_online_game,
         current_online_game,
-        play_online_card
+        play_online_card,
+        game_stats
     ]
 }
 
@@ -81,6 +85,8 @@ struct RoundResult {
 
 #[derive(Deserialize, Serialize)]
 struct GameState {
+    #[serde(default)]
+    opponent: Opponent,
     deck: Vec<Card>,
     #[serde(default)]
     discarded: Vec<Card>,
@@ -94,6 +100,14 @@ struct GameState {
     last_round: Option<RoundResult>,
     status: GameStatus,
     random_state: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Opponent {
+    #[default]
+    Tosser,
+    Pro,
 }
 
 #[derive(Queryable)]
@@ -129,6 +143,8 @@ struct NewOnlineGame<'a> {
 #[derive(Deserialize)]
 struct StartRequest {
     csrf: String,
+    #[serde(default)]
+    opponent: Opponent,
 }
 
 #[derive(Deserialize)]
@@ -151,12 +167,14 @@ struct PlayRequest {
 #[derive(Serialize)]
 struct GameView {
     mode: ViewMode,
+    opponent: Option<Opponent>,
     your_hand: Vec<Card>,
     your_winnings: Vec<Card>,
     server_winnings: Vec<Card>,
     server_hand_count: usize,
     server_has_led: bool,
     your_card_pending: bool,
+    your_played_card: Option<Card>,
     waiting_for_opponent: bool,
     deck_size: usize,
     game_id: Option<String>,
@@ -249,7 +267,7 @@ fn shuffle(deck: &mut [Card], state: &mut u64) {
     }
 }
 
-fn new_state(id: &Uuid) -> GameState {
+fn full_deck() -> Vec<Card> {
     let colours = [Colour::Blue, Colour::Red, Colour::Green, Colour::Yellow];
     let elements = [Element::Fire, Element::Ice, Element::Water];
     let mut deck = Vec::with_capacity(120);
@@ -264,6 +282,11 @@ fn new_state(id: &Uuid) -> GameState {
             }
         }
     }
+    deck
+}
+
+fn new_state(id: &Uuid, opponent: Opponent) -> GameState {
+    let mut deck = full_deck();
     let mut random_state = id
         .as_bytes()
         .iter()
@@ -286,6 +309,7 @@ fn new_state(id: &Uuid) -> GameState {
         Side::Server
     };
     let mut state = GameState {
+        opponent,
         deck,
         discarded: Vec::new(),
         your_hand,
@@ -309,8 +333,95 @@ fn take_server_card(state: &mut GameState) -> Option<Card> {
     if state.server_hand.is_empty() {
         return None;
     }
-    let index = (next_random(&mut state.random_state) as usize) % state.server_hand.len();
+    let index = match state.opponent {
+        Opponent::Tosser => {
+            (next_random(&mut state.random_state) as usize) % state.server_hand.len()
+        }
+        Opponent::Pro => pro_card_index(
+            &state.server_hand,
+            &state.server_winnings,
+            &state.your_winnings,
+            &state.discarded,
+        ),
+    };
     Some(state.server_hand.remove(index))
+}
+
+fn collection_value(winnings: &[Card]) -> f64 {
+    if has_won(winnings) {
+        return 1000.0;
+    }
+    let elements: std::collections::HashSet<_> = winnings.iter().map(|card| card.element).collect();
+    let matching = winnings
+        .iter()
+        .map(|card| {
+            winnings
+                .iter()
+                .filter(|other| other.element == card.element && other.colour == card.colour)
+                .count()
+        })
+        .max()
+        .unwrap_or(0);
+    // Both routes to victory matter; two matching cards are a one-card threat.
+    let element_progress = [0.0, 8.0, 28.0][elements.len()];
+    let matching_progress = [0.0, 4.0, 24.0][matching];
+    element_progress + matching_progress
+}
+
+fn collection_gain(winnings: &[Card], card: Card) -> f64 {
+    let mut next = winnings.to_vec();
+    next.push(card);
+    collection_value(&next) - collection_value(winnings)
+}
+
+fn pro_card_index(
+    hand: &[Card],
+    winnings: &[Card],
+    opponent_winnings: &[Card],
+    discarded: &[Card],
+) -> usize {
+    // Do not inspect the opponent's hand, their pending card, or the real deck.
+    let unseen: Vec<_> = full_deck()
+        .into_iter()
+        .filter(|card| {
+            !hand.contains(card)
+                && !winnings.contains(card)
+                && !opponent_winnings.contains(card)
+                && !discarded.contains(card)
+        })
+        .map(|card| {
+            let threat = collection_gain(opponent_winnings, card);
+            (card, threat)
+        })
+        .collect();
+    let mut best_index = 0;
+    let mut best_score = f64::NEG_INFINITY;
+    for (index, candidate) in hand.iter().enumerate() {
+        let gain = collection_gain(winnings, *candidate);
+        let mut score = 0.0;
+        let mut total_weight = 0.0;
+        for (opponent_card, threat) in &unseen {
+            // Expect opponents to favour cards that advance their own collection.
+            let weight = 1.0 + threat.min(40.0) / 8.0;
+            let utility = if beats(*candidate, *opponent_card) {
+                gain
+            } else if beats(*opponent_card, *candidate) {
+                -*threat
+            } else {
+                0.0
+            };
+            score += weight * utility;
+            total_weight += weight;
+        }
+        if total_weight > 0.0 {
+            score /= total_weight;
+        }
+        if score > best_score {
+            best_score = score;
+            best_index = index;
+        }
+    }
+    best_index
 }
 
 fn beats(first: Card, second: Card) -> bool {
@@ -364,6 +475,7 @@ fn has_won(winnings: &[Card]) -> bool {
 fn view(state: &GameState) -> GameView {
     GameView {
         mode: ViewMode::Solo,
+        opponent: Some(state.opponent),
         your_hand: state.your_hand.clone(),
         your_winnings: state.your_winnings.clone(),
         server_winnings: state.server_winnings.clone(),
@@ -371,6 +483,7 @@ fn view(state: &GameState) -> GameView {
             + usize::from(state.pending_server_card.is_some()),
         server_has_led: state.pending_server_card.is_some(),
         your_card_pending: false,
+        your_played_card: None,
         waiting_for_opponent: false,
         deck_size: state.deck.len(),
         game_id: None,
@@ -399,7 +512,7 @@ fn refill_hands(
 }
 
 fn new_online_state(id: &Uuid, first_token: String) -> OnlineGameState {
-    let solo_state = new_state(id);
+    let solo_state = new_state(id, Opponent::Tosser);
     let mut hands = [solo_state.your_hand, solo_state.server_hand];
     if let Some(card) = solo_state.pending_server_card {
         hands[1].push(card);
@@ -453,6 +566,7 @@ fn online_view(state: &OnlineGameState, seat: usize, game_id: &str) -> GameView 
     });
     GameView {
         mode: ViewMode::Online,
+        opponent: None,
         your_hand: state.hands[seat].clone(),
         your_winnings: state.winnings[seat].clone(),
         server_winnings: state.winnings[opponent].clone(),
@@ -466,6 +580,10 @@ fn online_view(state: &OnlineGameState, seat: usize, game_id: &str) -> GameView 
             .pending
             .is_some_and(|played| played.player == opponent),
         your_card_pending: state.pending.is_some_and(|played| played.player == seat),
+        your_played_card: state
+            .pending
+            .filter(|played| played.player == seat)
+            .map(|played| played.card),
         waiting_for_opponent: state.status == GameStatus::Waiting,
         deck_size: state.deck.len(),
         game_id: Some(game_id.to_owned()),
@@ -561,15 +679,44 @@ fn owned_game(conn: &mut diesel::SqliteConnection, id: &str) -> GameResult<Store
     Ok(StoredGame { state })
 }
 
+#[derive(Queryable, Serialize)]
+struct GameStat {
+    category: String,
+    completed: i64,
+}
+
+fn load_stats(conn: &mut diesel::SqliteConnection) -> GameResult<Vec<GameStat>> {
+    stats::table
+        .select((stats::category, stats::completed))
+        .order(diesel::dsl::sql::<diesel::sql_types::Integer>(
+            "CASE category WHEN 'pvp' THEN 0 WHEN 'private' THEN 1 WHEN 'tosser' THEN 2 ELSE 3 END",
+        ))
+        .load(conn)
+        .map_err(internal)
+}
+
+#[get("/games/cards-elemental/api/stats")]
+fn game_stats(pool: &State<DbPool>) -> GameResult<Private<Json<Vec<GameStat>>>> {
+    let mut conn = pool.get().map_err(internal)?;
+    Ok(Private(Json(load_stats(&mut conn)?)))
+}
+
 #[get("/games/cards-elemental")]
-fn index(navigation: crate::PageNavigation, jar: &CookieJar<'_>) -> Private<Template> {
-    Private(Template::render(
+fn index(
+    navigation: crate::PageNavigation,
+    jar: &CookieJar<'_>,
+    pool: &State<DbPool>,
+) -> GameResult<Private<Template>> {
+    let mut conn = pool.get().map_err(internal)?;
+    let statistics = load_stats(&mut conn)?;
+    Ok(Private(Template::render(
         "games/cards_elemental",
         context! {
             pages: navigation.0,
             csrf: crate::ensure_csrf(jar),
+            statistics,
         },
-    ))
+    )))
 }
 
 #[post(
@@ -585,7 +732,7 @@ fn start(
     csrf(jar, &request.csrf)?;
     let uuid = Uuid::new_v4();
     let id = uuid.as_hyphenated().to_string();
-    let state = new_state(&uuid);
+    let state = new_state(&uuid, request.opponent);
     let state_json = serde_json::to_string(&state).map_err(internal)?;
     let now = chrono::Utc::now().timestamp_millis();
     let mut conn = pool.get().map_err(internal)?;
@@ -1061,6 +1208,149 @@ mod tests {
     }
 
     #[test]
+    fn completed_counts_are_atomic_once_only_and_survive_session_cleanup() {
+        let (client, _dir) = client();
+        let pool = client.rocket().state::<DbPool>().unwrap();
+        let mut conn = pool.get().unwrap();
+        let now = chrono::Utc::now().timestamp_millis();
+        for opponent in ["tosser", "pro"] {
+            for status in ["won", "lost", "draw"] {
+                let id = format!("{opponent}-{status}");
+                let playing =
+                    serde_json::json!({"status":"playing", "opponent":opponent}).to_string();
+                diesel::insert_into(games::table)
+                    .values(NewGame {
+                        id: &id,
+                        state: &playing,
+                        created_at: now,
+                        updated_at: now,
+                    })
+                    .execute(&mut conn)
+                    .unwrap();
+                let ended = serde_json::json!({"status":status, "opponent":opponent}).to_string();
+                for _ in 0..2 {
+                    diesel::update(games::table.find(&id))
+                        .set(games::state.eq(&ended))
+                        .execute(&mut conn)
+                        .unwrap();
+                }
+            }
+        }
+        for visibility in ["public", "private"] {
+            for outcome in ["won", "draw"] {
+                let id = format!("{visibility}-{outcome}");
+                diesel::insert_into(online_games::table)
+                    .values(NewOnlineGame {
+                        id: &id,
+                        visibility,
+                        status: "waiting",
+                        state: "{}",
+                        created_at: now,
+                        updated_at: now,
+                    })
+                    .execute(&mut conn)
+                    .unwrap();
+                diesel::update(online_games::table.find(&id))
+                    .set(online_games::status.eq("playing"))
+                    .execute(&mut conn)
+                    .unwrap();
+                for _ in 0..2 {
+                    diesel::update(online_games::table.find(&id))
+                        .set(online_games::status.eq(outcome))
+                        .execute(&mut conn)
+                        .unwrap();
+                }
+            }
+        }
+        let expected = vec![("pvp", 2), ("private", 2), ("tosser", 3), ("pro", 3)];
+        let read = |conn: &mut diesel::SqliteConnection| {
+            load_stats(conn)
+                .unwrap()
+                .into_iter()
+                .map(|stat| (stat.category, stat.completed))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            read(&mut conn),
+            expected
+                .iter()
+                .map(|(key, n)| (key.to_string(), *n))
+                .collect::<Vec<_>>()
+        );
+        diesel::insert_into(games::table)
+            .values(NewGame {
+                id: "rolled-back",
+                state: "{\"status\":\"playing\",\"opponent\":\"pro\"}",
+                created_at: now,
+                updated_at: now,
+            })
+            .execute(&mut conn)
+            .unwrap();
+        let rollback = conn.transaction::<(), diesel::result::Error, _>(|conn| {
+            diesel::update(games::table.find("rolled-back"))
+                .set(games::state.eq("{\"status\":\"won\",\"opponent\":\"pro\"}"))
+                .execute(conn)?;
+            assert_eq!(load_stats(conn).unwrap()[3].completed, 4);
+            Err(diesel::result::Error::RollbackTransaction)
+        });
+        assert!(rollback.is_err());
+        diesel::delete(games::table).execute(&mut conn).unwrap();
+        diesel::delete(online_games::table)
+            .execute(&mut conn)
+            .unwrap();
+        assert_eq!(
+            read(&mut conn),
+            expected
+                .iter()
+                .map(|(key, n)| (key.to_string(), *n))
+                .collect::<Vec<_>>()
+        );
+        let statistics: serde_json::Value = client
+            .get("/games/cards-elemental/api/stats")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(statistics[0]["category"], "pvp");
+        assert_eq!(statistics[0]["completed"], 2);
+        let html = client
+            .get("/games/cards-elemental")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(html.find("Completed games").unwrap() > html.find("How to play").unwrap());
+        assert!(html.contains("id=\"cards-stat-pro\" class=\"mb-0\">3"));
+    }
+
+    #[test]
+    fn statistics_migration_backfills_existing_completed_sessions_only() {
+        use diesel::connection::SimpleConnection;
+        let (client, _dir) = client();
+        let mut conn = client.rocket().state::<DbPool>().unwrap().get().unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000018_create_cards_elemental_stats/down.sql"
+        ))
+        .unwrap();
+        conn.batch_execute(
+            "INSERT INTO cards_elemental_games VALUES
+              ('old', '{\"status\":\"won\"}', 0, 0),
+              ('pro', '{\"status\":\"lost\",\"opponent\":\"pro\"}', 0, 0),
+              ('active', '{\"status\":\"playing\"}', 0, 0);
+             INSERT INTO cards_elemental_online_games VALUES
+              ('public', 'public', 'won', '{}', 0, 0),
+              ('private', 'private', 'draw', '{}', 0, 0),
+              ('waiting', 'public', 'waiting', '{}', 0, 0);",
+        )
+        .unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000018_create_cards_elemental_stats/up.sql"
+        ))
+        .unwrap();
+        for stat in load_stats(&mut conn).unwrap() {
+            assert_eq!(stat.completed, 1, "{}", stat.category);
+        }
+    }
+
+    #[test]
     fn element_order_and_equal_element_values_determine_round_winner() {
         assert_eq!(
             winner_of(
@@ -1118,7 +1408,7 @@ mod tests {
 
     #[test]
     fn new_deck_has_120_cards_and_deals_five_to_each_player() {
-        let state = new_state(&Uuid::new_v4());
+        let state = new_state(&Uuid::new_v4(), Opponent::Tosser);
         assert_eq!(state.your_hand.len(), 5);
         assert_eq!(
             state.server_hand.len() + usize::from(state.pending_server_card.is_some()),
@@ -1133,6 +1423,119 @@ mod tests {
                 + state.server_winnings.len(),
             120
         );
+    }
+
+    #[test]
+    fn pro_targets_both_winning_sets_and_blocks_opponents_missing_element() {
+        let fire = card(Element::Fire, Colour::Red, 10);
+        let ice = card(Element::Ice, Colour::Blue, 10);
+        let water = card(Element::Water, Colour::Green, 10);
+        let hand = [fire, ice, water];
+        let two_elements = [
+            card(Element::Fire, Colour::Yellow, 1),
+            card(Element::Ice, Colour::Green, 1),
+        ];
+        assert_eq!(pro_card_index(&hand, &two_elements, &[], &[]), 2);
+
+        let matching_pair = [
+            card(Element::Fire, Colour::Red, 1),
+            card(Element::Fire, Colour::Red, 2),
+        ];
+        assert_eq!(pro_card_index(&hand, &matching_pair, &[], &[]), 0);
+        assert_eq!(pro_card_index(&hand, &[], &two_elements, &[]), 1);
+    }
+
+    #[test]
+    fn pro_choice_does_not_depend_on_hidden_cards_or_deck_order() {
+        let mut state = new_state(&Uuid::from_u128(42), Opponent::Pro);
+        state.pending_server_card = None;
+        let json = serde_json::to_string(&state).unwrap();
+        let mut other: GameState = serde_json::from_str(&json).unwrap();
+        other.your_hand.reverse();
+        other.your_hand[0] = card(Element::Fire, Colour::Red, 1);
+        other.deck.reverse();
+        other.random_state = 98765;
+        assert_eq!(take_server_card(&mut state), take_server_card(&mut other));
+    }
+
+    #[test]
+    fn pro_beats_random_play_more_often_than_it_loses() {
+        let mut wins = 0;
+        let mut losses = 0;
+        for seed in 1..=600 {
+            let mut state = new_state(&Uuid::from_u128(seed), Opponent::Pro);
+            if let Some(pending) = state.pending_server_card.take() {
+                state.server_hand.push(pending);
+            }
+            for _ in 0..200 {
+                let index = next_random(&mut state.random_state) as usize % state.your_hand.len();
+                let played = state.your_hand.remove(index);
+                let server_played = take_server_card(&mut state).unwrap();
+                match winner_of(played, server_played) {
+                    Some(Side::You) => {
+                        state.your_winnings.push(played);
+                        state.discarded.push(server_played);
+                    }
+                    Some(Side::Server) => {
+                        state.server_winnings.push(server_played);
+                        state.discarded.push(played);
+                    }
+                    None => state.discarded.extend([played, server_played]),
+                }
+                if has_won(&state.your_winnings) {
+                    losses += 1;
+                    break;
+                }
+                if has_won(&state.server_winnings) {
+                    wins += 1;
+                    break;
+                }
+                refill_hands(
+                    &mut state.deck,
+                    &mut state.discarded,
+                    &mut state.your_hand,
+                    &mut state.server_hand,
+                    &mut state.random_state,
+                );
+            }
+        }
+        assert_eq!(wins + losses, 600);
+        eprintln!("Pro vs random: {wins} wins, {losses} losses");
+        assert!(wins >= 360, "Pro should win at least 60%: {wins}/600");
+    }
+
+    #[test]
+    fn solo_opponent_is_validated_persisted_and_defaults_to_tosser() {
+        let (client, _dir) = client();
+        let csrf = csrf_for(&client);
+        let response = client
+            .post("/games/cards-elemental/api/games")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"csrf":csrf, "opponent":"pro"}).to_string())
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let view: serde_json::Value = response.into_json().unwrap();
+        assert_eq!(view["opponent"], "pro");
+        let saved: serde_json::Value = client
+            .get("/games/cards-elemental/api/game")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(saved["opponent"], "pro");
+        assert_eq!(
+            client
+                .post("/games/cards-elemental/api/games")
+                .header(ContentType::JSON)
+                .body(serde_json::json!({"csrf":csrf, "opponent":"invalid"}).to_string())
+                .dispatch()
+                .status(),
+            Status::UnprocessableEntity
+        );
+        let state = new_state(&Uuid::from_u128(1), Opponent::Tosser);
+        let mut json = serde_json::to_value(state).unwrap();
+        json.as_object_mut().unwrap().remove("opponent");
+        let legacy: GameState = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.opponent, Opponent::Tosser);
     }
 
     #[test]
@@ -1284,6 +1687,13 @@ mod tests {
         assert_eq!(lead_result.status(), Status::Ok);
         let lead_state: serde_json::Value = lead_result.into_json().unwrap();
         assert_eq!(lead_state["your_card_pending"], true);
+        assert!(lead_state["your_played_card"]["element"].is_string());
+        let reloaded: serde_json::Value = lead
+            .get("/games/cards-elemental/api/online/current")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(reloaded["your_played_card"], lead_state["your_played_card"]);
 
         let response_state: serde_json::Value = responder
             .get("/games/cards-elemental/api/online/current")
@@ -1291,6 +1701,7 @@ mod tests {
             .into_json()
             .unwrap();
         assert_eq!(response_state["server_has_led"], true);
+        assert!(response_state["your_played_card"].is_null());
         assert_eq!(response_state["your_hand"].as_array().unwrap().len(), 5);
         let resolved = responder
             .post("/games/cards-elemental/api/online/play")
@@ -1301,6 +1712,7 @@ mod tests {
         let resolved_state: serde_json::Value = resolved.into_json().unwrap();
         assert_eq!(resolved_state["round"], 2);
         assert_eq!(resolved_state["last_round"]["round"], 1);
+        assert!(resolved_state["your_played_card"].is_null());
     }
 
     #[test]

@@ -11,13 +11,18 @@
             <p class="mb-0">Play against the server or challenge someone online.</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            <label for="cards-opponent" class="visually-hidden">Solo opponent</label>
+            <select id="cards-opponent" class="form-select w-auto" aria-label="Solo opponent">
+                <option value="tosser">Tosser (random)</option>
+                <option value="pro">Pro (strategic)</option>
+            </select>
             <button id="cards-new-game" class="btn btn-outline-primary" type="button">Play solo</button>
             <button id="cards-start-public" class="btn btn-primary" type="button">Create public game</button>
             <button id="cards-start-private" class="btn btn-outline-primary" type="button">Create private game</button>
         </div>
     </header>
 
-    <section class="cards-online-lobby card p-3 mb-4" aria-labelledby="cards-online-title">
+    <section id="cards-online-lobby" class="cards-online-lobby card p-3 mb-4" aria-labelledby="cards-online-title">
         <h2 id="cards-online-title" class="h5">Join a game</h2>
         <div class="d-flex gap-2 flex-wrap align-items-end mb-3">
             <label class="flex-grow-1" for="cards-join-id">
@@ -36,18 +41,6 @@
         <code id="cards-game-id"></code>
         <button id="cards-copy-game-id" class="btn btn-sm btn-outline-primary" type="button">Copy ID</button>
     </section>
-
-    <div class="cards-rules card p-3 mb-4">
-        <h2 class="h5">How to play</h2>
-        <ul class="mb-0">
-            <li>Each player starts with five cards. On your turn, choose one card to play.</li>
-            <li>Fire beats ice, ice beats water, and water beats fire. Matching elements compare values; equal values draw.</li>
-            <li>The round winner keeps their own card. Draws discard both played cards. Players draw back up while cards are available.</li>
-            <li>When the draw pile runs out, discarded cards that nobody won are shuffled back in. Won cards stay out of play.</li>
-            <li>Win by collecting all three elements, or three cards with the same colour and element.</li>
-            <li>The first player is chosen randomly. The leader plays a hidden card, then the other player chooses a response. The round winner leads next; after a draw, the same player leads again.</li>
-        </ul>
-    </div>
 
     <p id="cards-status" class="alert alert-secondary" role="status" aria-live="polite">
         Start a game to draw your hand.
@@ -83,6 +76,30 @@
         </aside>
     </div>
     <p id="cards-error" class="text-danger mt-3 mb-0" role="alert"></p>
+    <div class="cards-rules card p-3 mt-4">
+        <h2 class="h5">How to play</h2>
+        <ul class="mb-0">
+            <li>Solo opponents: Tosser plays randomly; Pro works toward either winning set and tries to block yours, without seeing your hidden cards.</li>
+            <li>Each player starts with five cards. On your turn, choose one card to play.</li>
+            <li>Fire beats ice, ice beats water, and water beats fire. Matching elements compare values; equal values draw.</li>
+            <li>The round winner keeps their own card. Draws discard both played cards. Players draw back up while cards are available.</li>
+            <li>When the draw pile runs out, discarded cards that nobody won are shuffled back in. Won cards stay out of play.</li>
+            <li>Win by collecting all three elements, or three cards with the same colour and element.</li>
+            <li>The first player is chosen randomly. The leader plays a hidden card, then the other player chooses a response. The round winner leads next; after a draw, the same player leads again.</li>
+        </ul>
+    </div>
+    <section class="cards-pile card p-3 mt-4" aria-labelledby="cards-statistics-title">
+        <h2 id="cards-statistics-title" class="h5">Completed games</h2>
+        <dl class="d-flex gap-4 flex-wrap mb-0">
+            {% for stat in statistics %}
+            <div>
+                <dt>{% if stat.category == "pvp" %}PvP{% elif stat.category == "private" %}PvP (private){% elif stat.category == "tosser" %}Solo Tosser{% else %}Solo Pro{% endif %}</dt>
+                <dd id="cards-stat-{{ stat.category }}" class="mb-0">{{ stat.completed }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        <p class="text-muted small mt-2 mb-0">Counts games finished with a winner or draw, not abandoned games.</p>
+    </section>
 </section>
 <script src="/static/cards-elemental.js" defer></script>
 {% endblock content %}

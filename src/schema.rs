@@ -174,6 +174,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    cards_elemental_stats (category) {
+        category -> Text,
+        completed -> BigInt,
+    }
+}
+
+diesel::table! {
     cards_elemental_online_games (id) {
         id -> Text,
         visibility -> Text,

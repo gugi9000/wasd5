@@ -17,6 +17,11 @@
     margin-top: 0.25rem;
 }
 
+#cards-online-lobby[hidden],
+#cards-game-id-section[hidden] {
+    display: none !important;
+}
+
 .cards-deck-count-wrap {
     position: relative;
     display: inline-block;
@@ -117,9 +122,14 @@ button.elemental-card:focus-visible:not(:disabled) {
 }
 
 .elemental-card .card-element {
-    font-size: 0.95rem;
-    font-weight: 700;
-    text-transform: capitalize;
+    width: 3rem;
+    height: 3rem;
+    object-fit: contain;
+}
+
+.elemental-card.compact .card-element {
+    width: 2rem;
+    height: 2rem;
 }
 
 .elemental-card .card-colour {
@@ -177,8 +187,15 @@ button.elemental-card:focus-visible:not(:disabled) {
     background: var(--card-bg);
 }
 
-.cards-round-result .elemental-card {
+.cards-played-card {
+    display: grid;
+    gap: 0.4rem;
     width: min(8rem, 40%);
+    text-align: center;
+}
+
+.cards-round-result[hidden] {
+    display: none;
 }
 
 [data-bs-theme="dark"] .elemental-card {

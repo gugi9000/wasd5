@@ -17,14 +17,21 @@ hard-drops. Tetris scores are submitted once per server-issued game run, but
 gameplay is client-side and scores are not independently replay-validated.
 
 Cards Elemental is available at `/games/cards-elemental` as a solo game against
-the server or as an online two-player game. Public games appear in the open
+the server or as an online two-player game. Choose **Tosser** for random solo
+play or **Pro** for a strategic opponent. Pro weighs progress toward both
+winning sets and the opponent's public collection, without inspecting hidden
+hands, pending cards, or deck order. Public games appear in the open
 games list; private games can be joined using their shareable game ID. Online
 games synchronize through server-side state and expire after 24 hours. The
 draw-pile count is shown in-game; when it cannot supply both players, discarded
 cards are shuffled back in while won cards stay out of play. It follows the
 elemental card rules from the
 [`cards_elemental`](https://github.com/gugi9000/cards_elemental) reference
-project. There is no leaderboard.
+project. There is no leaderboard. Below the rules, persistent backend totals
+show completed public PvP, private PvP, Solo Tosser, and Solo Pro games.
+Only a winner or draw counts; abandoned games do not. Totals survive session
+expiry. The migration includes completed sessions still present in the database;
+previously expired sessions cannot be recovered.
 
 ## Management TUI
 

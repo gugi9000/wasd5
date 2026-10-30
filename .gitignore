@@ -16,3 +16,8 @@ pages/
 !/static/tetris.js
 !/static/cards-elemental.css
 !/static/cards-elemental.js
+!/static/cards-elemental/
+/static/cards-elemental/*
+!/static/cards-elemental/ild.svg
+!/static/cards-elemental/is.svg
+!/static/cards-elemental/vand.svg
