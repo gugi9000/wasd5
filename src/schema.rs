@@ -143,6 +143,28 @@ diesel::table! {
 }
 
 diesel::table! {
+    tetris_runs (id) {
+        id -> Text,
+        user_id -> Nullable<Integer>,
+        created_at -> BigInt,
+        submitted_at -> Nullable<BigInt>,
+    }
+}
+
+diesel::table! {
+    tetris_scores (id) {
+        id -> Integer,
+        run_id -> Text,
+        player_name -> Text,
+        user_id -> Nullable<Integer>,
+        score -> BigInt,
+        lines -> Integer,
+        level -> Integer,
+        created_at -> BigInt,
+    }
+}
+
+diesel::table! {
     comic_strips (id) {
         id -> Integer,
         album_id -> Integer,

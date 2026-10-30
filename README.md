@@ -11,6 +11,11 @@ Signed-in users appear under their account name with an **Account** badge.
 Guests choose a name after winning and are marked as unverified. Server-side
 validation makes scores harder to forge, but does not prevent automated play.
 
+Tetris is available at `/games/tetris`. Use H/J/K/L or the arrow keys to move
+and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space
+hard-drops. Tetris scores are submitted once per server-issued game run, but
+gameplay is client-side and scores are not independently replay-validated.
+
 ## Management TUI
 
 `manage` is a Ratatui terminal application for trusted local operators. It opens

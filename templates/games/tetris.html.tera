@@ -1,0 +1,82 @@
+{% extends "base" %}
+{% block title %}Tetris{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<link rel="stylesheet" href="/static/tetris.css" />
+<section id="tetris" data-csrf="{{ csrf }}" data-signed-in="{{ signed_in }}" data-username="{{ username }}">
+    <h1>Tetris</h1>
+    <p>Fit falling pieces together to clear rows. The game follows the website’s current light or dark theme.</p>
+
+    <div class="tetris-layout">
+        <div class="tetris-play">
+            <div class="tetris-toolbar d-flex align-items-center gap-3 flex-wrap mb-3">
+                <button id="tetris-start" class="btn btn-primary" type="button">Start game</button>
+                <span>Score: <strong id="tetris-score">0</strong></span>
+                <span>Lines: <strong id="tetris-lines">0</strong></span>
+                <span>Level: <strong id="tetris-level">1</strong></span>
+            </div>
+            <div class="tetris-board-wrap">
+                <div id="tetris-board" class="tetris-board" role="grid" aria-label="Tetris playfield"></div>
+            </div>
+            <p id="tetris-status" class="mt-2 mb-0" role="status" aria-live="polite">Start a game when you’re ready.</p>
+        </div>
+        <aside class="tetris-side">
+            <section class="tetris-panel mb-3" aria-labelledby="next-title">
+                <h2 id="next-title" class="h5">Next piece</h2>
+                <div id="tetris-next" class="tetris-next" aria-label="Next piece preview"></div>
+            </section>
+            <section class="tetris-panel" aria-labelledby="controls-title">
+                <h2 id="controls-title" class="h5">Controls</h2>
+                <ul class="mb-0">
+                    <li><kbd>H</kbd> / <kbd>←</kbd> move left</li>
+                    <li><kbd>J</kbd> / <kbd>↓</kbd> soft drop</li>
+                    <li><kbd>L</kbd> / <kbd>→</kbd> move right</li>
+                    <li><kbd>K</kbd> / <kbd>↑</kbd> rotate counter-clockwise</li>
+                    <li><kbd>Space</kbd> hard drop</li>
+                    <li><kbd>I</kbd> / <kbd>Enter</kbd> rotate clockwise</li>
+                </ul>
+            </section>
+            <div class="tetris-touch-controls mt-3" aria-label="Touch controls">
+                <button class="btn btn-outline-secondary" type="button" data-action="left" aria-label="Move left">←</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="soft-drop" aria-label="Soft drop">↓</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="right" aria-label="Move right">→</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="rotate-ccw" aria-label="Rotate counter-clockwise">↶</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="rotate-cw" aria-label="Rotate clockwise">↷</button>
+            </div>
+        </aside>
+    </div>
+
+    <form id="tetris-score-form" class="mt-4 d-flex align-items-end gap-2 flex-wrap" hidden>
+        <label class="form-label mb-0" for="tetris-player-name">Name for the leaderboard (up to 24 characters)</label>
+        <input id="tetris-player-name" class="form-control tetris-name" maxlength="24" autocomplete="nickname" required />
+        <button class="btn btn-success" type="submit">Save score</button>
+    </form>
+    <p id="tetris-score-message" class="mt-2 mb-0" aria-live="polite"></p>
+
+    <section class="mt-5" aria-labelledby="tetris-leaderboard-title">
+        <h2 id="tetris-leaderboard-title" class="h3">Leaderboard</h2>
+        <p><span class="badge text-bg-success">Account</span> marks a signed-in player. Guest names are unverified.</p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Score</th><th scope="col">Lines</th><th scope="col">Level</th></tr></thead>
+                <tbody id="tetris-leaderboard">
+                    {% for score in leaderboard %}
+                    <tr>
+                        <th scope="row">{{ loop.index }}</th>
+                        <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                        <td>{{ score.score }}</td>
+                        <td>{{ score.lines }}</td>
+                        <td>{{ score.level }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-muted">No scores yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</section>
+<script src="/static/tetris-core.js" defer></script>
+<script src="/static/tetris.js" defer></script>
+{% endblock content %}

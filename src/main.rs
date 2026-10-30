@@ -29,6 +29,7 @@ mod helpers;
 mod models;
 mod packages;
 mod schema;
+mod tetris;
 use admin::{
     admin_calendar_settings_get, admin_create_picture_folder, admin_edit_page_get,
     admin_edit_page_post, admin_files_get, admin_index, admin_landing_get, admin_landing_post,
@@ -465,6 +466,7 @@ async fn main() -> Result<(), rocket::Error> {
         .mount("/", comics::routes())
         .mount("/", fitness::routes())
         .mount("/", games::routes())
+        .mount("/", tetris::routes())
         .manage(wasd5::remote_management::RemoteManagement::from_env()
             .expect("Invalid remote management configuration"))
         .mount("/", wasd5::remote_management::routes())

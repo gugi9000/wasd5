@@ -11,3 +11,6 @@ pages/
 !/static/fitness-player.js
 !/static/minesweeper.css
 !/static/minesweeper.js
+!/static/tetris-core.js
+!/static/tetris.css
+!/static/tetris.js
