@@ -2,6 +2,15 @@
 
 A Rocket.rs based webapp for my personal site.
 
+## Games
+
+Minesweeper is available at `/games/minesweeper` in Easy, Intermediate,
+Advanced, and Custom modes. The server generates boards, applies moves, and
+measures leaderboard times; the three fixed modes have separate leaderboards.
+Signed-in users appear under their account name with an **Account** badge.
+Guests choose a name after winning and are marked as unverified. Server-side
+validation makes scores harder to forge, but does not prevent automated play.
+
 ## Management TUI
 
 `manage` is a Ratatui terminal application for trusted local operators. It opens

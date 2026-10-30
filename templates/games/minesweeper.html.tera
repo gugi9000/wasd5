@@ -1,0 +1,107 @@
+{% extends "base" %}
+{% block title %}Minesweeper{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<link rel="stylesheet" href="/static/minesweeper.css" />
+<section id="minesweeper" data-csrf="{{ csrf }}" data-signed-in="{{ signed_in }}" data-username="{{ username }}">
+    <h1>Minesweeper</h1>
+    <p>Clear every safe square without detonating a mine. Left-click to reveal, right-click to flag, and middle-click a number to clear its neighbors. Flags never turn into question marks.</p>
+
+    <div class="d-flex align-items-end gap-3 flex-wrap mb-3">
+        <label for="minesweeper-mode" class="form-label mb-0">
+            Mode
+            <select id="minesweeper-mode" class="form-select">
+                <option value="easy">Easy · 9 × 9 · 10 mines</option>
+                <option value="intermediate">Intermediate · 16 × 16 · 40 mines</option>
+                <option value="advanced">Advanced · 16 × 30 · 99 mines</option>
+                <option value="custom">Custom</option>
+            </select>
+        </label>
+        <div id="custom-options" class="d-flex gap-2" hidden>
+            <label class="form-label mb-0">Rows <input id="custom-rows" class="form-control" type="number" min="5" max="24" value="10" /></label>
+            <label class="form-label mb-0">Columns <input id="custom-columns" class="form-control" type="number" min="5" max="30" value="10" /></label>
+            <label class="form-label mb-0">Mines <input id="custom-mines" class="form-control" type="number" min="1" max="719" value="15" /></label>
+        </div>
+        <button id="new-game" class="btn btn-primary" type="button">New game</button>
+        <button id="flag-mode" class="btn btn-outline-secondary" type="button" aria-pressed="false">Tap to flag: off</button>
+        <div class="ms-auto d-flex gap-3" aria-live="polite">
+            <span>Mines: <strong id="mine-counter">—</strong></span>
+            <span>Time: <strong id="game-time">0.0 s</strong></span>
+        </div>
+    </div>
+    <p id="game-status" class="mb-3" role="status">Choose a mode and start a new game.</p>
+    <div id="board-scroll" class="board-scroll" aria-label="Minesweeper board"></div>
+    <form id="guest-score" class="mt-3 d-flex align-items-end gap-2 flex-wrap" hidden>
+        <label class="form-label mb-0" for="guest-name">Name for the leaderboard (up to 24 characters)</label>
+        <input id="guest-name" class="form-control guest-name" maxlength="24" autocomplete="nickname" required />
+        <button class="btn btn-success" type="submit">Save score</button>
+    </form>
+    <p id="score-message" class="mt-2 mb-0" aria-live="polite"></p>
+
+    <section class="mt-5" aria-labelledby="leaderboard-title">
+        <h2 id="leaderboard-title" class="h3">Leaderboards</h2>
+        <p>Times are measured and validated by the server. <span class="badge text-bg-success">Account</span> marks a score submitted by a signed-in user; guest names are not verified.</p>
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <h3 class="h5">Easy</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <tbody id="scores-easy">
+                            {% for score in easy_scores %}
+                            <tr>
+                                <th scope="row">{{ loop.index }}</th>
+                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <h3 class="h5">Intermediate</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <tbody id="scores-intermediate">
+                            {% for score in intermediate_scores %}
+                            <tr>
+                                <th scope="row">{{ loop.index }}</th>
+                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <h3 class="h5">Advanced</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <tbody id="scores-advanced">
+                            {% for score in advanced_scores %}
+                            <tr>
+                                <th scope="row">{{ loop.index }}</th>
+                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+</section>
+<script src="/static/minesweeper.js" defer></script>
+{% endblock content %}

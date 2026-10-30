@@ -113,6 +113,35 @@ diesel::table! {
 }
 
 diesel::table! {
+    minesweeper_games (id) {
+        id -> Text,
+        mode -> Text,
+        rows -> Integer,
+        board_columns -> Integer,
+        mine_count -> Integer,
+        mines -> Text,
+        revealed -> Text,
+        flags -> Text,
+        user_id -> Nullable<Integer>,
+        started_at -> BigInt,
+        status -> Text,
+        elapsed_ms -> Nullable<BigInt>,
+    }
+}
+
+diesel::table! {
+    minesweeper_scores (id) {
+        id -> Integer,
+        game_id -> Text,
+        mode -> Text,
+        player_name -> Text,
+        user_id -> Nullable<Integer>,
+        elapsed_ms -> BigInt,
+        created_at -> BigInt,
+    }
+}
+
+diesel::table! {
     comic_strips (id) {
         id -> Integer,
         album_id -> Integer,

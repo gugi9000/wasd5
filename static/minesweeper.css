@@ -1,0 +1,68 @@
+.minesweeper-board {
+    border-collapse: separate;
+    border-spacing: 2px;
+    margin: 0 auto;
+    touch-action: manipulation;
+}
+
+.minesweeper-board td {
+    padding: 0;
+}
+
+.minesweeper-cell {
+    display: block;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 2px outset #cbd5e1;
+    border-radius: 2px;
+    background: #dce3eb;
+    color: #172033;
+    font-weight: 700;
+    line-height: 28px;
+    text-align: center;
+    user-select: none;
+}
+
+.minesweeper-cell.revealed {
+    border: 1px solid #94a3b8;
+    background: #f1f5f9;
+}
+
+.minesweeper-cell.mine-hit {
+    background: #fca5a5;
+}
+
+.minesweeper-cell.flagged {
+    color: #b91c1c;
+}
+
+.minesweeper-cell:disabled {
+    opacity: 1;
+}
+
+.number-1 { color: #2563eb; }
+.number-2 { color: #15803d; }
+.number-3 { color: #dc2626; }
+.number-4 { color: #6d28d9; }
+.number-5 { color: #92400e; }
+.number-6 { color: #0e7490; }
+.number-7 { color: #111827; }
+.number-8 { color: #64748b; }
+
+.board-scroll {
+    overflow: auto;
+    max-width: 100%;
+}
+
+.guest-name {
+    width: min(18rem, 100%);
+}
+
+@media (max-width: 576px) {
+    .minesweeper-cell {
+        width: 28px;
+        height: 28px;
+        line-height: 24px;
+    }
+}

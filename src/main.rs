@@ -24,6 +24,7 @@ mod comics;
 mod creatine;
 mod db;
 mod fitness;
+mod games;
 mod helpers;
 mod models;
 mod packages;
@@ -463,6 +464,7 @@ async fn main() -> Result<(), rocket::Error> {
         )
         .mount("/", comics::routes())
         .mount("/", fitness::routes())
+        .mount("/", games::routes())
         .manage(wasd5::remote_management::RemoteManagement::from_env()
             .expect("Invalid remote management configuration"))
         .mount("/", wasd5::remote_management::routes())

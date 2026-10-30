@@ -9,3 +9,5 @@ pages/
 !/static/fitness-core.js
 !/static/fitness-editor.js
 !/static/fitness-player.js
+!/static/minesweeper.css
+!/static/minesweeper.js

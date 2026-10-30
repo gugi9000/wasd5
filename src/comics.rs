@@ -98,6 +98,10 @@ impl Viewer {
         self.0.as_ref().map(|user| (user.id, user.admin))
     }
 
+    pub(crate) fn username(&self) -> Option<&str> {
+        self.0.as_ref().map(|user| user.username.as_str())
+    }
+
     fn user(&self) -> Result<&ComicUser, ComicError> {
         self.0
             .as_ref()
