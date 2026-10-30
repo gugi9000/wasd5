@@ -20,6 +20,7 @@ use wasd5::pages as page_store;
 
 mod admin;
 mod calendar;
+mod comics;
 mod creatine;
 mod db;
 mod helpers;
@@ -450,6 +451,15 @@ async fn main() -> Result<(), rocket::Error> {
 
     let fig = rocket::build()
         .manage(pool)
+        .manage(
+            comics::ComicStorage::initialize(
+                env::var_os("COMICS_DIR")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("uploads").join("comics")),
+            )
+            .expect("Failed to initialize comics image storage"),
+        )
+        .mount("/", comics::routes())
         .mount(
             "/",
             routes![

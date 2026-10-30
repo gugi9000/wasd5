@@ -1,5 +1,6 @@
 /target
 wasd5.db
+/uploads/
 pages/
 /static/*
 !/static/box-breathing.css

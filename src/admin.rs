@@ -269,13 +269,21 @@ fn list_static_assets(dir: &str, url_prefix: &str, as_image_markdown: bool) -> V
 pub(crate) struct LoginForm {
     username: String,
     password: String,
+    next: Option<String>,
 }
 
-#[get("/admin/login")]
-pub(crate) fn admin_login_get(jar: &CookieJar, navigation: crate::PageNavigation) -> Template {
+#[get("/admin/login?<next>")]
+pub(crate) fn admin_login_get(
+    jar: &CookieJar,
+    navigation: crate::PageNavigation,
+    next: Option<&str>,
+) -> Template {
     let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
-    Template::render("admin/login", context! { pages: pages, csrf: csrf })
+    Template::render(
+        "admin/login",
+        context! { pages: pages, csrf: csrf, next: next.filter(|value| *value == "comics") },
+    )
 }
 
 #[post("/admin/login", data = "<form>")]
@@ -306,14 +314,18 @@ pub(crate) fn admin_login_post(
             jar.add_private(Cookie::new("user_role", u.role.clone()));
             let expiry = Utc::now().timestamp() + 24 * 3600;
             jar.add_private(Cookie::new("session_expires", expiry.to_string()));
-            return Ok(Redirect::to("/admin"));
+            return Ok(Redirect::to(if f.next.as_deref() == Some("comics") {
+                "/comics"
+            } else {
+                "/admin"
+            }));
         }
     }
     let pages = navigation.0;
     let csrf = crate::ensure_csrf(jar);
     Err(Template::render(
         "admin/login",
-        context! { error: "Invalid credentials", pages: pages, csrf: csrf },
+        context! { error: "Invalid credentials", pages: pages, csrf: csrf, next: f.next.filter(|value| value == "comics") },
     ))
 }
 

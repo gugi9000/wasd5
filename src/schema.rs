@@ -84,3 +84,30 @@ diesel::table! {
         edited_at -> BigInt,
     }
 }
+
+diesel::table! {
+    comic_albums (id) {
+        id -> Integer,
+        owner_id -> Integer,
+        title -> Text,
+        subtext -> Text,
+        hidden -> Bool,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+        banner_filename -> Nullable<Text>,
+    }
+}
+
+diesel::table! {
+    comic_strips (id) {
+        id -> Integer,
+        album_id -> Integer,
+        title -> Text,
+        subtext -> Text,
+        image_filename -> Text,
+        hidden -> Bool,
+        display_order -> Integer,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+    }
+}

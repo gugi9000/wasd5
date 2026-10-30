@@ -1,0 +1,32 @@
+{% extends "base" %}
+{% block title %}Comics{% endblock title %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center gap-3 mb-3 flex-wrap">
+  <h1 class="mb-0">Comics</h1>
+  {% if user %}
+  <a class="btn btn-primary" href="/comics/new">Create album</a>
+  {% else %}
+  <a class="btn btn-outline-primary" href="/admin/login?next=comics">Sign in to create comics</a>
+  {% endif %}
+</div>
+<p>Explore comic albums and their strips.</p>
+{% if user %}<p class="text-muted small">Signed in as {{ user.username }}. Your drafts are shown here; visitors only see published albums.{% if user.admin %} As an admin, you can also manage other users' albums.{% endif %}</p>{% endif %}
+{% if albums | length == 0 %}
+<p class="text-muted">No albums to show yet.</p>
+{% else %}
+<div class="row g-3">
+  {% for album in albums %}
+  <div class="col-md-6">
+    <article class="card p-3 h-100">
+      {% if album.banner_filename %}
+      <a href="/comics/{{ album.id }}" class="mb-3"><img src="/comics/{{ album.id }}/banner" alt="Banner art for {{ album.title }}" loading="lazy" decoding="async" style="height: auto" /></a>
+      {% endif %}
+      <h2 class="h4"><a href="/comics/{{ album.id }}">{{ album.title }}</a></h2>
+      {% if album.hidden %}<p><span class="badge text-bg-warning">Hidden draft</span></p>{% endif %}
+      {% if album.subtext %}<p class="mb-0" style="white-space: pre-wrap; overflow-wrap: anywhere">{{ album.subtext }}</p>{% endif %}
+    </article>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock content %}

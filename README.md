@@ -2,6 +2,47 @@
 
 A Rocket.rs based webapp for my personal site.
 
+## Comics
+
+The top-level Comics link opens `/comics`. Any signed-in user can create albums
+and upload strips/pages. Accounts are created with the existing admin user tools.
+The album owner and admins can edit titles, optional plain-text subtexts,
+visibility, and strip ordering. New forms default to hidden drafts.
+
+Albums can optionally have banner art, shown above the album and on its gallery
+card. Create the album, then use Edit album to upload, replace, or remove its
+banner. Banners use the same validated image formats, size limits, private
+per-album storage, and visibility checks as strips. Replacement/removal deletes
+the old file after the metadata change commits; failed saves retain the existing
+banner and clean up the new upload.
+
+A hidden album hides all its strips and images. A published album can contain
+individually hidden strips. Owners and admins can preview their drafts; everyone
+else receives a 404 for hidden albums/strips, including direct image URLs.
+Authenticated gallery responses and image responses are marked private/no-store
+so publishing and hiding do not leave publicly cacheable copies. Previously
+downloaded images cannot be revoked from a visitor's device.
+
+Metadata is stored in SQLite; images are stored outside `static`, in
+`uploads/comics/<album-id>/<generated-name>.<extension>` by default. Set
+`COMICS_DIR` to move this private storage directory (it must not be under
+`static`). Never expose it through a web-server alias or public file mount.
+The app's `/comics/<album-id>/strips/<strip-id>/image` route checks both album and
+strip visibility before serving an image.
+
+Uploads accept validated PNG, JPEG, GIF, or WebP files up to 20 MiB, with
+dimension and decoder memory limits. SVG is not supported. Images keep their
+original encoding; filenames and extensions are generated from the detected
+image format rather than the uploaded name. Strip metadata is committed only
+after the file has been copied; failed SQL writes clean up the new file.
+A process crash between the filesystem write and SQL commit can leave an
+unreferenced file, but cannot publish an image without its metadata.
+
+Schema migrations run automatically on startup. Mount persistent storage for
+both `DATABASE_URL` and `COMICS_DIR` in production and back them up together
+while uploads are stopped. Deploying only the executable/database is not enough
+to preserve images.
+
 ## Breathing guide
 
 The Health menu links to `/tools/box-breathing`, an interactive tool with

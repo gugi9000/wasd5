@@ -28,6 +28,7 @@ clap = { version = "4.3", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 shell-words = "1"
 tempfile = "3"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 # Email
 lettre = { version = "0.11", features = ["smtp-transport", "builder", "native-tls"] }

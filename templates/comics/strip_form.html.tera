@@ -1,0 +1,36 @@
+{% extends "base" %}
+{% block title %}{% if strip %}Edit strip{% else %}Add strip{% endif %} - Comics{% endblock title %}
+{% block content %}
+<h1 class="h3">{% if strip %}Edit strip{% else %}Add strip / page{% endif %}</h1>
+<p>Album: <a href="/comics/{{ album.id }}">{{ album.title }}</a></p>
+<form method="post" {% if not strip %}enctype="multipart/form-data"{% endif %} action="/comics/{{ album.id }}/strips/{% if strip %}{{ strip.id }}/edit{% else %}new{% endif %}">
+  <input type="hidden" name="csrf" value="{{ csrf }}" />
+  <div class="mb-3">
+    <label for="title" class="form-label">Strip / page title</label>
+    <input id="title" name="title" class="form-control" maxlength="200" required value="{% if strip %}{{ strip.title }}{% endif %}" />
+  </div>
+  {% if not strip %}
+  <div class="mb-3">
+    <label for="image" class="form-label">Image</label>
+    <input id="image" name="image" type="file" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" required />
+    <p class="text-muted small">PNG, JPEG, GIF, or WebP; up to 20 MiB. Images are validated before saving.</p>
+  </div>
+  {% endif %}
+  <div class="mb-3">
+    <label for="subtext" class="form-label">Subtext / caption (optional)</label>
+    <textarea id="subtext" name="subtext" class="form-control" rows="4" maxlength="10000">{% if strip %}{{ strip.subtext }}{% endif %}</textarea>
+  </div>
+  <div class="mb-3">
+    <label for="display_order" class="form-label">Display order</label>
+    <input id="display_order" name="display_order" type="number" min="0" max="2147483647" class="form-control" required value="{% if strip %}{{ strip.display_order }}{% else %}{{ next_order }}{% endif %}" />
+    <p class="text-muted small">Lower numbers appear first. Strips with the same order are shown oldest first.</p>
+  </div>
+  <div class="form-check mb-3">
+    <input id="hidden" name="hidden" type="checkbox" class="form-check-input" {% if not strip or strip.hidden %}checked{% endif %} />
+    <label for="hidden" class="form-check-label">Hidden draft (owner and admins only)</label>
+  </div>
+  <p class="text-muted small">Uncheck to publish this strip. It is only public when the album is also published.</p>
+  <button class="btn btn-primary" type="submit">{% if strip %}Save strip{% else %}Upload strip{% endif %}</button>
+  <a class="btn btn-secondary" href="/comics/{{ album.id }}">Cancel</a>
+</form>
+{% endblock content %}

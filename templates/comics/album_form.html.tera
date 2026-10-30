@@ -1,0 +1,46 @@
+{% extends "base" %}
+{% block title %}{% if album %}Edit album{% else %}Create album{% endif %} - Comics{% endblock title %}
+{% block content %}
+<h1 class="h3">{% if album %}Edit album{% else %}Create album{% endif %}</h1>
+<form method="post" action="{% if album %}/comics/{{ album.id }}/edit{% else %}/comics/new{% endif %}">
+  <input type="hidden" name="csrf" value="{{ csrf }}" />
+  <div class="mb-3">
+    <label for="title" class="form-label">Album title</label>
+    <input id="title" name="title" class="form-control" maxlength="200" required value="{% if album %}{{ album.title }}{% endif %}" />
+  </div>
+  <div class="mb-3">
+    <label for="subtext" class="form-label">Subtext / caption (optional)</label>
+    <textarea id="subtext" name="subtext" class="form-control" rows="4" maxlength="10000">{% if album %}{{ album.subtext }}{% endif %}</textarea>
+  </div>
+  <div class="form-check mb-3">
+    <input id="hidden" name="hidden" type="checkbox" class="form-check-input" {% if not album or album.hidden %}checked{% endif %} />
+    <label for="hidden" class="form-check-label">Hidden draft (owner and admins only)</label>
+  </div>
+  <p class="text-muted small">Hiding the album also hides every strip and image inside it. Uncheck to publish the album.</p>
+  <button class="btn btn-primary" type="submit">Save album</button>
+  <a class="btn btn-secondary" href="{% if album %}/comics/{{ album.id }}{% else %}/comics{% endif %}">Cancel</a>
+</form>
+{% if album %}
+<section class="border-top mt-4 pt-4" aria-labelledby="banner-heading">
+  <h2 id="banner-heading" class="h4">Banner art (optional)</h2>
+  {% if album.banner_filename %}
+  <img src="/comics/{{ album.id }}/banner" alt="Banner art for {{ album.title }}" class="mb-3" style="height: auto" />
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" action="/comics/{{ album.id }}/banner">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <label for="banner" class="form-label">Banner image</label>
+    <input id="banner" name="image" type="file" class="form-control mb-2" accept="image/png,image/jpeg,image/gif,image/webp" required />
+    <p class="text-muted small">PNG, JPEG, GIF, or WebP; up to 20 MiB. A wide image works best. The banner follows the album's visibility.</p>
+    <button class="btn btn-primary" type="submit">{% if album.banner_filename %}Replace banner{% else %}Upload banner{% endif %}</button>
+  </form>
+  {% if album.banner_filename %}
+  <form method="post" action="/comics/{{ album.id }}/banner/remove" class="mt-2">
+    <input type="hidden" name="csrf" value="{{ csrf }}" />
+    <button class="btn btn-outline-danger" type="submit">Remove banner</button>
+  </form>
+  {% endif %}
+</section>
+{% else %}
+<p class="text-muted mt-3">After creating the album, use Edit album to add optional banner art.</p>
+{% endif %}
+{% endblock content %}
