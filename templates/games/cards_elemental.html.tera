@@ -1,0 +1,81 @@
+{% extends "base" %}
+{% block title %}Cards Elemental{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<link rel="stylesheet" href="/static/cards-elemental.css" />
+<section id="cards-elemental" data-csrf="{{ csrf }}">
+    <header class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
+        <div>
+            <h1>Cards Elemental</h1>
+            <p class="mb-0">Play against the server or challenge someone online.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button id="cards-new-game" class="btn btn-outline-primary" type="button">Play solo</button>
+            <button id="cards-start-public" class="btn btn-primary" type="button">Create public game</button>
+            <button id="cards-start-private" class="btn btn-outline-primary" type="button">Create private game</button>
+        </div>
+    </header>
+
+    <section class="cards-online-lobby card p-3 mb-4" aria-labelledby="cards-online-title">
+        <h2 id="cards-online-title" class="h5">Join a game</h2>
+        <div class="d-flex gap-2 flex-wrap align-items-end mb-3">
+            <label class="flex-grow-1" for="cards-join-id">
+                Private game ID
+                <input id="cards-join-id" class="form-control" autocomplete="off" spellcheck="false">
+            </label>
+            <button id="cards-join-button" class="btn btn-secondary" type="button">Join by ID</button>
+        </div>
+        <h3 class="h6">Open public games</h3>
+        <ul id="cards-open-games" class="list-group"></ul>
+        <p id="cards-no-open-games" class="text-muted mb-0">No public games are waiting.</p>
+    </section>
+
+    <section id="cards-game-id-section" class="alert alert-info d-flex gap-2 flex-wrap align-items-center" hidden>
+        <span>Share this game ID with your opponent:</span>
+        <code id="cards-game-id"></code>
+        <button id="cards-copy-game-id" class="btn btn-sm btn-outline-primary" type="button">Copy ID</button>
+    </section>
+
+    <div class="cards-rules card p-3 mb-4">
+        <h2 class="h5">How to play</h2>
+        <ul class="mb-0">
+            <li>Each player starts with five cards. On your turn, choose one card to play.</li>
+            <li>Fire beats ice, ice beats water, and water beats fire. Matching elements compare values; equal values draw.</li>
+            <li>The round winner keeps their own card. Draws discard both played cards. Players draw back up while cards are available.</li>
+            <li>When the draw pile runs out, discarded cards that nobody won are shuffled back in. Won cards stay out of play.</li>
+            <li>Win by collecting all three elements, or three cards with the same colour and element.</li>
+            <li>The first player is chosen randomly. The leader plays a hidden card, then the other player chooses a response. The round winner leads next; after a draw, the same player leads again.</li>
+        </ul>
+    </div>
+
+    <p id="cards-status" class="alert alert-secondary" role="status" aria-live="polite">
+        Start a game to draw your hand.
+    </p>
+    <section id="cards-round-result" class="cards-round-result mb-4" aria-live="polite" hidden></section>
+
+    <div class="cards-game-layout">
+        <section aria-labelledby="your-hand-title">
+            <h2 id="your-hand-title" class="h4">Your hand</h2>
+            <p id="cards-turn-hint" class="text-muted">Choose a card to play.</p>
+            <div id="cards-hand" class="cards-hand"></div>
+        </section>
+        <aside class="cards-side">
+            <section class="cards-pile card p-3">
+                <h2 class="h5">Draw pile <span id="cards-deck-count" class="badge text-bg-secondary">0</span></h2>
+                <p class="mb-0 text-muted">Unseen cards available to draw.</p>
+            </section>
+            <section class="cards-pile card p-3">
+                <h2 class="h5">Your winnings <span id="your-winnings-count" class="badge text-bg-secondary">0</span></h2>
+                <div id="your-winnings" class="cards-winnings"></div>
+            </section>
+            <section class="cards-pile card p-3">
+                <h2 class="h5">Opponent winnings <span id="server-winnings-count" class="badge text-bg-secondary">0</span></h2>
+                <div id="server-winnings" class="cards-winnings"></div>
+            </section>
+        </aside>
+    </div>
+    <p id="cards-error" class="text-danger mt-3 mb-0" role="alert"></p>
+</section>
+<script src="/static/cards-elemental.js" defer></script>
+{% endblock content %}

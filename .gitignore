@@ -14,3 +14,5 @@ pages/
 !/static/tetris-core.js
 !/static/tetris.css
 !/static/tetris.js
+!/static/cards-elemental.css
+!/static/cards-elemental.js

@@ -165,6 +165,26 @@ diesel::table! {
 }
 
 diesel::table! {
+    cards_elemental_games (id) {
+        id -> Text,
+        state -> Text,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+    }
+}
+
+diesel::table! {
+    cards_elemental_online_games (id) {
+        id -> Text,
+        visibility -> Text,
+        status -> Text,
+        state -> Text,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+    }
+}
+
+diesel::table! {
     comic_strips (id) {
         id -> Integer,
         album_id -> Integer,

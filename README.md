@@ -16,6 +16,16 @@ and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space
 hard-drops. Tetris scores are submitted once per server-issued game run, but
 gameplay is client-side and scores are not independently replay-validated.
 
+Cards Elemental is available at `/games/cards-elemental` as a solo game against
+the server or as an online two-player game. Public games appear in the open
+games list; private games can be joined using their shareable game ID. Online
+games synchronize through server-side state and expire after 24 hours. The
+draw-pile count is shown in-game; when it cannot supply both players, discarded
+cards are shuffled back in while won cards stay out of play. It follows the
+elemental card rules from the
+[`cards_elemental`](https://github.com/gugi9000/cards_elemental) reference
+project. There is no leaderboard.
+
 ## Management TUI
 
 `manage` is a Ratatui terminal application for trusted local operators. It opens

@@ -1,0 +1,178 @@
+.cards-rules,
+.cards-pile,
+.cards-online-lobby {
+    background: var(--card-bg);
+    border-color: var(--card-border);
+}
+
+.cards-online-lobby li code {
+    overflow-wrap: anywhere;
+}
+
+.cards-online-lobby label {
+    min-width: min(100%, 20rem);
+}
+
+.cards-online-lobby input {
+    margin-top: 0.25rem;
+}
+
+.cards-game-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 19rem);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.cards-hand {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+}
+
+.elemental-card {
+    --card-accent: #475569;
+    display: flex;
+    min-height: 10.5rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.8rem;
+    border: 2px solid var(--card-accent);
+    border-radius: 0.8rem;
+    background:
+        radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--card-accent) 15%, transparent), transparent 70%),
+        var(--card-bg);
+    color: var(--bs-body-color);
+    box-shadow: 0 2px 6px rgb(15 23 42 / 12%);
+    text-align: center;
+}
+
+button.elemental-card {
+    width: 100%;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button.elemental-card:hover:not(:disabled),
+button.elemental-card:focus-visible:not(:disabled) {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 12px rgb(15 23 42 / 22%);
+}
+
+.elemental-card:disabled {
+    cursor: default;
+    opacity: 0.8;
+}
+
+.elemental-card.compact {
+    min-height: 5.5rem;
+    padding: 0.4rem;
+    border-width: 1px;
+    box-shadow: none;
+}
+
+.elemental-card .card-value {
+    font-size: 2.4rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.elemental-card.compact .card-value {
+    font-size: 1.5rem;
+}
+
+.elemental-card .card-element {
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.elemental-card .card-colour {
+    font-size: 0.78rem;
+    text-transform: capitalize;
+}
+
+.elemental-card.fire { --card-accent: #dc2626; }
+.elemental-card.ice { --card-accent: #0284c7; }
+.elemental-card.water { --card-accent: #0891b2; }
+
+.card-colour::before {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    margin-right: 0.35rem;
+    border: 1px solid rgb(0 0 0 / 25%);
+    border-radius: 50%;
+    background: currentColor;
+    content: "";
+    vertical-align: 0.02rem;
+}
+
+.card-colour.red { color: #dc2626; }
+.card-colour.green { color: #16a34a; }
+.card-colour.blue { color: #2563eb; }
+.card-colour.yellow { color: #ca8a04; }
+
+.cards-side {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.cards-winnings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+    gap: 0.45rem;
+}
+
+.cards-winnings:empty::after {
+    color: var(--muted);
+    content: "No cards yet";
+    font-size: 0.9rem;
+}
+
+.cards-round-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.75rem;
+    background: var(--card-bg);
+}
+
+.cards-round-result .elemental-card {
+    width: min(8rem, 40%);
+}
+
+[data-bs-theme="dark"] .elemental-card {
+    background:
+        radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--card-accent) 28%, transparent), transparent 70%),
+        #111827;
+    color: #e5e7eb;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+}
+
+[data-bs-theme="dark"] .card-colour.red { color: #f87171; }
+[data-bs-theme="dark"] .card-colour.green { color: #4ade80; }
+[data-bs-theme="dark"] .card-colour.blue { color: #60a5fa; }
+[data-bs-theme="dark"] .card-colour.yellow { color: #facc15; }
+
+@media (max-width: 760px) {
+    .cards-game-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cards-side {
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    button.elemental-card {
+        transition: none;
+    }
+}

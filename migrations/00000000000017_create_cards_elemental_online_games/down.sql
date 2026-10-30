@@ -1,0 +1,1 @@
+DROP TABLE cards_elemental_online_games;

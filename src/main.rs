@@ -20,6 +20,7 @@ use wasd5::pages as page_store;
 
 mod admin;
 mod calendar;
+mod cards_elemental;
 mod comics;
 mod creatine;
 mod db;
@@ -467,6 +468,7 @@ async fn main() -> Result<(), rocket::Error> {
         .mount("/", fitness::routes())
         .mount("/", games::routes())
         .mount("/", tetris::routes())
+        .mount("/", cards_elemental::routes())
         .manage(wasd5::remote_management::RemoteManagement::from_env()
             .expect("Invalid remote management configuration"))
         .mount("/", wasd5::remote_management::routes())
