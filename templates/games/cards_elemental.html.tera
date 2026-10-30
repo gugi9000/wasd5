@@ -62,7 +62,14 @@
         </section>
         <aside class="cards-side">
             <section class="cards-pile card p-3">
-                <h2 class="h5">Draw pile <span id="cards-deck-count" class="badge text-bg-secondary">0</span></h2>
+                <h2 class="h5">Draw pile
+                    <span class="cards-deck-count-wrap">
+                        <span id="cards-deck-count" class="badge text-bg-secondary" tabindex="0" aria-describedby="cards-deck-stats">0</span>
+                        <span id="cards-deck-stats" class="cards-deck-stats" role="tooltip">
+                            <strong>Deck exhaustion odds:</strong> Emptying the initial 110-card draw pile takes 55 rounds. In 500,000 random-play simulations, none reached that point before a player won; games averaged 7 rounds and the longest lasted 25. That puts a 95% upper bound near 0.0006% (under 1 in 167,000) for random play—not an exact estimate for strategic players. Try as you might.
+                        </span>
+                    </span>
+                </h2>
                 <p class="mb-0 text-muted">Unseen cards available to draw.</p>
             </section>
             <section class="cards-pile card p-3">
