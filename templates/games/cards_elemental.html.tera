@@ -82,7 +82,7 @@
         <ul class="mb-0">
             <li>Solo opponents: Tosser plays randomly; Pro works toward either winning set; Pro2 favours colours only after winning a matching element/colour pair, and blocks imminent wins at any time. Neither strategic bot sees your hidden cards.</li>
             <li>Each player starts with five cards. On your turn, choose one card to play.</li>
-            <li>Fire beats ice, ice beats water, and water beats fire. Matching elements compare values; equal values draw.</li>
+            <li>Fire melts ice, water quenches fire, and ice freezes water. For matching elements, the bigger value wins; equal values tie.</li>
             <li>The round winner keeps their own card. Draws discard both played cards. Players draw back up while cards are available.</li>
             <li>When the draw pile runs out, discarded cards that nobody won are shuffled back in. Won cards stay out of play.</li>
             <li>Win by collecting all three elements, or three cards with the same colour and element.</li>
@@ -102,6 +102,7 @@
             {% endfor %}
         </dl>
         <p class="text-muted small mt-2 mb-0">Counts games finished with a winner or draw, not abandoned games.</p>
+        <p class="text-muted small mt-2 mb-0">Sound effects by <a href="#">Dragon Studio</a></p>
     </section>
 </section>
 <script src="/static/cards-elemental.js" defer></script>

@@ -23,6 +23,48 @@
     const copyGameIdButton = document.getElementById("cards-copy-game-id");
     let game = null;
     let busy = false;
+    let roundAudio = null;
+
+    function roundEffect(round) {
+        if (!round.winner) {
+            return {
+                text: `Same element (${round.you_played.element}) and equal values (${round.you_played.value}): a tie.`,
+                file: "dragon-studio-heartbeat-hall.mp3",
+            };
+        }
+        const winner = round.winner === "you" ? round.you_played : round.server_played;
+        const loser = round.winner === "you" ? round.server_played : round.you_played;
+        if (winner.element === loser.element) {
+            return {
+                text: `Same element (${winner.element}): bigger value wins (${winner.value} beats ${loser.value}).`,
+                file: "dragon-studio-dust-burst.mp3",
+            };
+        }
+        const effects = {
+            fire: { text: "Fire melts ice.", file: "dragon-studio-flame-spell-impact.mp3" },
+            water: { text: "Water quenches fire.", file: "dragon-studio-elemental-spell-impact-water.mp3" },
+            ice: { text: "Ice freezes water.", file: "dragon-studio-elemental-spell-impact-ice.mp3" },
+        };
+        return effects[winner.element];
+    }
+
+    function updateGame(next, silent = false) {
+        const previousRound = game?.last_round?.round || 0;
+        const newRound = next?.last_round;
+        game = next;
+        if (silent) {
+            if (roundAudio) roundAudio.pause();
+            return;
+        }
+        if (!newRound || newRound.round <= previousRound) return;
+        if (roundAudio) roundAudio.pause();
+        roundAudio = new Audio(`/static/cards-elemental/${roundEffect(newRound).file}`);
+        roundAudio.play().catch((reason) => {
+            error.textContent = reason.name === "NotAllowedError"
+                ? "Your browser blocked the sound effect. Interact with the page to allow sounds."
+                : `Could not play the sound effect: ${reason.message}`;
+        });
+    }
 
     async function request(url, body) {
         const options = { headers: { Accept: "application/json" } };
@@ -125,15 +167,7 @@
         else outcome.textContent = "Draw — both cards are discarded.";
         const explanation = document.createElement("p");
         explanation.className = "w-100 text-center mb-0";
-        const winningCard = round.winner === "you" ? round.you_played : round.server_played;
-        const losingCard = round.winner === "you" ? round.server_played : round.you_played;
-        if (!round.winner) {
-            explanation.textContent = `Same element (${round.you_played.element}) and equal values (${round.you_played.value}): a draw.`;
-        } else if (winningCard.element === losingCard.element) {
-            explanation.textContent = `Same element (${winningCard.element}): ${winningCard.value} beats ${losingCard.value}.`;
-        } else {
-            explanation.textContent = `${winningCard.element[0].toUpperCase()}${winningCard.element.slice(1)} beats ${losingCard.element}.`;
-        }
+        explanation.textContent = roundEffect(round).text;
         result.append(you, versus, opponent, outcome, explanation);
     }
 
@@ -234,7 +268,7 @@
             const url = game.mode === "online"
                 ? "/games/cards-elemental/api/online/play"
                 : "/games/cards-elemental/api/game/play";
-            game = await request(url, { card_index: index });
+            updateGame(await request(url, { card_index: index }));
             render();
         } catch (reason) {
             error.textContent = reason.message;
@@ -252,9 +286,10 @@
         status.textContent = visibility ? "Creating online game…" : "Shuffling and dealing…";
         setControlsDisabled(true);
         try {
-            game = visibility
+            const next = visibility
                 ? await request("/games/cards-elemental/api/online", { visibility })
                 : await request("/games/cards-elemental/api/games", { opponent: opponentSelect.value });
+            updateGame(next, true);
             render();
         } catch (reason) {
             error.textContent = reason.message;
@@ -277,10 +312,11 @@
         error.textContent = "";
         setControlsDisabled(true);
         try {
-            game = await request(
+            const next = await request(
                 `/games/cards-elemental/api/online/${encodeURIComponent(normalizedId)}/join`,
                 {}
             );
+            updateGame(next, true);
             render();
         } catch (reason) {
             error.textContent = reason.message;
@@ -320,7 +356,7 @@
         try {
             const latest = await request("/games/cards-elemental/api/online/current");
             if (latest && JSON.stringify(latest) !== JSON.stringify(game)) {
-                game = latest;
+                updateGame(latest);
                 render();
                 void refreshOpenGames();
             }

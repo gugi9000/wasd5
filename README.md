@@ -46,6 +46,11 @@ player identifiers. PvP is not displayed on this page. Existing retained
 completed sessions are backfilled; older counts without recoverable results
 are explicitly marked unrecorded. Simulator games never enter these totals.
 
+New round results play an effect for fire melting ice, water quenching fire,
+ice freezing water, bigger-value wins, or ties. Effects play in solo and online
+games, but not when restoring a saved result or polling it again. Browser
+audio restrictions or playback failures are reported on the game page.
+
 ### Cards Elemental bot simulator
 
 Run `cargo run --release --bin cards_elemental_sim` for 10,000 Tosser vs Pro
