@@ -12,7 +12,7 @@ use wasd5::cards_elemental_core::{
 #[cfg(test)]
 use wasd5::cards_elemental_core::{Colour, Element, pro_card_index};
 
-use crate::comics::Private;
+use crate::comics::{Private, Viewer};
 use crate::db::DbPool;
 use crate::schema::{
     cards_elemental_games as games, cards_elemental_online_games as online_games,
@@ -136,6 +136,8 @@ struct PlayRequest {
 struct GameView {
     mode: ViewMode,
     opponent: Option<Opponent>,
+    your_name: Option<String>,
+    opponent_name: Option<String>,
     your_hand: Vec<Card>,
     your_winnings: Vec<Card>,
     server_winnings: Vec<Card>,
@@ -171,6 +173,8 @@ struct OnlineGameState {
     hands: [Vec<Card>; 2],
     winnings: [Vec<Card>; 2],
     player_tokens: [Option<String>; 2],
+    #[serde(default)]
+    player_names: [Option<String>; 2],
     starter: usize,
     pending: Option<OnlinePlayedCard>,
     round: u32,
@@ -284,6 +288,8 @@ fn view(state: &GameState) -> GameView {
     GameView {
         mode: ViewMode::Solo,
         opponent: Some(state.opponent),
+        your_name: None,
+        opponent_name: None,
         your_hand: state.your_hand.clone(),
         your_winnings: state.your_winnings.clone(),
         server_winnings: state.server_winnings.clone(),
@@ -314,6 +320,7 @@ fn new_online_state(id: &Uuid, first_token: String) -> OnlineGameState {
         hands,
         winnings: [Vec::new(), Vec::new()],
         player_tokens: [Some(first_token), None],
+        player_names: [None, None],
         starter: if solo_state.starter == Side::You {
             0
         } else {
@@ -358,6 +365,8 @@ fn online_view(state: &OnlineGameState, seat: usize, game_id: &str) -> GameView 
     GameView {
         mode: ViewMode::Online,
         opponent: None,
+        your_name: state.player_names[seat].clone(),
+        opponent_name: state.player_names[opponent].clone(),
         your_hand: state.hands[seat].clone(),
         your_winnings: state.winnings[seat].clone(),
         server_winnings: state.winnings[opponent].clone(),
@@ -622,6 +631,7 @@ fn index(
     navigation: crate::PageNavigation,
     jar: &CookieJar<'_>,
     pool: &State<DbPool>,
+    viewer: Viewer,
 ) -> GameResult<Private<Template>> {
     let mut conn = pool.get().map_err(internal)?;
     let statistics = load_stats(&mut conn)?;
@@ -630,6 +640,7 @@ fn index(
         context! {
             pages: navigation.0,
             csrf: crate::ensure_csrf(jar),
+            username: viewer.username().unwrap_or(""),
             statistics,
         },
     )))
@@ -789,6 +800,7 @@ fn play_card(
 fn create_online_game(
     pool: &State<DbPool>,
     jar: &CookieJar<'_>,
+    viewer: Viewer,
     request: Json<CreateOnlineRequest>,
 ) -> GameResult<Private<Json<GameView>>> {
     csrf(jar, &request.csrf)?;
@@ -801,7 +813,8 @@ fn create_online_game(
     let uuid = Uuid::new_v4();
     let id = uuid.as_hyphenated().to_string();
     let token = new_token();
-    let state = new_online_state(&uuid, token.clone());
+    let mut state = new_online_state(&uuid, token.clone());
+    state.player_names[0] = viewer.username().map(str::to_owned);
     let state_json = serde_json::to_string(&state).map_err(internal)?;
     let now = chrono::Utc::now().timestamp_millis();
     let mut conn = pool.get().map_err(internal)?;
@@ -854,6 +867,7 @@ fn join_online_game(
     id: &str,
     pool: &State<DbPool>,
     jar: &CookieJar<'_>,
+    viewer: Viewer,
     request: Json<JoinOnlineRequest>,
 ) -> GameResult<Private<Json<GameView>>> {
     csrf(jar, &request.csrf)?;
@@ -878,6 +892,7 @@ fn join_online_game(
         ));
     }
     state.player_tokens[1] = Some(token.clone());
+    state.player_names[1] = viewer.username().map(str::to_owned);
     state.status = GameStatus::Playing;
     let new_state = serde_json::to_string(&state).map_err(internal)?;
     let now = chrono::Utc::now().timestamp_millis();
@@ -1102,6 +1117,7 @@ mod tests {
             let app = rocket::custom(rocket::Config::debug_default())
                 .manage(pool.clone())
                 .mount("/", routes())
+                .mount("/", rocket::routes![crate::admin::admin_login_post])
                 .attach(Template::fairing());
             Client::tracked(app).unwrap()
         };
@@ -1121,6 +1137,81 @@ mod tests {
             .next()
             .unwrap()
             .to_owned()
+    }
+
+    #[test]
+    fn online_names_follow_player_seats_and_legacy_games_remain_readable() {
+        let mut state = new_online_state(&Uuid::new_v4(), "host-token".into());
+        state.player_names = [Some("Alice".into()), Some("Bob".into())];
+        let host = online_view(&state, 0, "game");
+        let guest = online_view(&state, 1, "game");
+        assert_eq!(host.your_name.as_deref(), Some("Alice"));
+        assert_eq!(host.opponent_name.as_deref(), Some("Bob"));
+        assert_eq!(guest.your_name.as_deref(), Some("Bob"));
+        assert_eq!(guest.opponent_name.as_deref(), Some("Alice"));
+        let mut legacy = serde_json::to_value(&state).unwrap();
+        legacy.as_object_mut().unwrap().remove("player_names");
+        let restored: OnlineGameState = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.player_names, [None, None]);
+    }
+
+    #[test]
+    fn online_games_capture_authenticated_names_on_create_and_join() {
+        let (host, guest, _dir) = client_pair();
+        let pool = host.rocket().state::<DbPool>().unwrap();
+        let mut conn = pool.get().unwrap();
+        let password_hash = bcrypt::hash("test-password", 4).unwrap();
+        for (client, username) in [(&host, "Alice"), (&guest, "Bob")] {
+            diesel::insert_into(crate::schema::users::table)
+                .values(crate::models::NewUser {
+                    username,
+                    password_hash: &password_hash,
+                    role: "member",
+                    created_at: chrono::Utc::now().timestamp(),
+                    email: None,
+                })
+                .execute(&mut conn)
+                .unwrap();
+            let login = client
+                .post("/admin/login")
+                .header(ContentType::Form)
+                .body(format!("username={username}&password=test-password"))
+                .dispatch();
+            assert_eq!(login.status(), Status::SeeOther);
+        }
+        let host_csrf = csrf_for(&host);
+        let guest_csrf = csrf_for(&guest);
+        let created: serde_json::Value = host
+            .post("/games/cards-elemental/api/online")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"visibility":"private","csrf":host_csrf}).to_string())
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(created["your_name"], "Alice");
+        let id = created["game_id"].as_str().unwrap();
+        let joined: serde_json::Value = guest
+            .post(format!("/games/cards-elemental/api/online/{id}/join"))
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"csrf":guest_csrf,"player_name":"Forged"}).to_string())
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(joined["your_name"], "Bob");
+        assert_eq!(joined["opponent_name"], "Alice");
+        let current: serde_json::Value = host
+            .get("/games/cards-elemental/api/online/current")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(current["your_name"], "Alice");
+        assert_eq!(current["opponent_name"], "Bob");
+        let html = host
+            .get("/games/cards-elemental")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(html.contains("data-username=\"Alice\""));
     }
 
     #[test]

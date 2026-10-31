@@ -4,7 +4,7 @@
 {% block sidebar %}{% endblock sidebar %}
 {% block content %}
 <link rel="stylesheet" href="/static/cards-elemental.css" />
-<section id="cards-elemental" data-csrf="{{ csrf }}">
+<section id="cards-elemental" data-csrf="{{ csrf }}" data-username="{{ username }}">
     <header class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-3">
         <div>
             <h1>Cards Elemental</h1>

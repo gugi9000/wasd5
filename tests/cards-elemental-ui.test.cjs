@@ -22,13 +22,13 @@ function element() {
     };
 }
 
-async function loadUI() {
+async function loadUI(username = "") {
     const elements = new Map();
     const get = (id) => {
         if (!elements.has(id)) elements.set(id, element());
         return elements.get(id);
     };
-    get("cards-elemental").dataset = { csrf: "token" };
+    get("cards-elemental").dataset = { csrf: "token", username };
     get("cards-opponent").value = "tosser";
     const state = { games: [], current: null, requests: [], intervals: new Map() };
     const game = (status, id = "created") => ({
@@ -40,6 +40,10 @@ async function loadUI() {
         {
             document: { getElementById: get, createElement: element },
             window: { setInterval(callback, delay) { state.intervals.set(delay, callback); } },
+            Audio: class {
+                play() { return Promise.resolve(); }
+                pause() {}
+            },
             fetch: async (url, options) => {
                 state.requests.push({ url, options });
                 let response = null;
@@ -134,4 +138,64 @@ test("status is below the playing board and immediately above your hand", () => 
     assert.ok(board < status && status < handTitle);
     assert.match(template, /class="dropdown-menu" aria-labelledby="cards-create-game"/);
     assert.match(template, /id="cards-online-lobby"[^>]* hidden/);
+});
+
+test("round outcomes are green for wins, red for losses and neutral for ties", async () => {
+    const { get, state, flush, game } = await loadUI();
+    get("cards-start-public").listeners.click();
+    await flush();
+    const card = { element: "fire", colour: "red", value: 2 };
+    for (const [winner, colour, text] of [
+        ["you", "text-success-emphasis", "You win the round!"],
+        ["server", "text-danger-emphasis", "Your opponent wins the round."],
+        [null, "text-body-secondary", "Draw — both cards are discarded."],
+    ]) {
+        state.current = {
+            ...game("playing"),
+            last_round: { round: (state.current?.last_round?.round || 0) + 1, you_played: card, server_played: card, winner },
+        };
+        state.intervals.get(2500)();
+        await flush();
+        const result = get("cards-round-result").children;
+        assert.equal(result[0].children[0].textContent, "You");
+        assert.equal(result[2].children[0].textContent, "Opponent");
+        assert.ok(result[3].className.includes(colour));
+        assert.equal(result[3].textContent, text);
+    }
+});
+
+test("played-card labels use PvP usernames, including a pending card", async () => {
+    const { get, state, flush, game } = await loadUI();
+    get("cards-start-public").listeners.click();
+    await flush();
+    const card = { element: "ice", colour: "blue", value: 3 };
+    state.current = {
+        ...game("playing"), your_name: "Alice <3", opponent_name: "Bob",
+        last_round: { round: 1, you_played: card, server_played: card, winner: "you" },
+    };
+    state.intervals.get(2500)();
+    await flush();
+    assert.equal(get("cards-round-result").children[0].children[0].textContent, "Alice <3");
+    assert.equal(get("cards-round-result").children[2].children[0].textContent, "Bob");
+    state.current.your_played_card = card;
+    state.intervals.get(2500)();
+    await flush();
+    assert.equal(get("cards-round-result").children[0].children[0].textContent, "Alice <3");
+});
+
+test("solo labels use the signed-in username and each bot's name", async () => {
+    for (const [opponent, name] of [["tosser", "Tosser"], ["pro", "Pro"], ["pro2", "Pro2"]]) {
+        const { get, state, flush, game } = await loadUI("Alice");
+        get("cards-start-public").listeners.click();
+        await flush();
+        const card = { element: "water", colour: "green", value: 4 };
+        state.current = {
+            ...game("playing"), mode: "solo", opponent,
+            last_round: { round: 1, you_played: card, server_played: card, winner: "server" },
+        };
+        state.intervals.get(2500)();
+        await flush();
+        assert.equal(get("cards-round-result").children[0].children[0].textContent, "Alice");
+        assert.equal(get("cards-round-result").children[2].children[0].textContent, name);
+    }
 });

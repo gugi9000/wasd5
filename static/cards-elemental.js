@@ -146,9 +146,15 @@
 
     function renderResult(round, pendingCard) {
         result.replaceChildren();
+        const yourName = game.mode === "online"
+            ? game.your_name || "You"
+            : root.dataset.username || "You";
+        const opponentName = game.mode === "solo"
+            ? { tosser: "Tosser", pro: "Pro", pro2: "Pro2" }[game.opponent]
+            : game.opponent_name || "Opponent";
         if (pendingCard) {
             result.hidden = false;
-            result.append(playedCard("You played", pendingCard));
+            result.append(playedCard(yourName, pendingCard));
             const waiting = document.createElement("p");
             waiting.className = "w-100 text-center mb-0";
             waiting.textContent = "Waiting for your opponent to respond.";
@@ -160,13 +166,16 @@
             return;
         }
         result.hidden = false;
-        const you = playedCard("You played", round.you_played);
+        const you = playedCard(yourName, round.you_played);
         const versus = document.createElement("strong");
         versus.className = "text-muted";
         versus.textContent = "vs";
-        const opponent = playedCard("Opponent played", round.server_played);
+        const opponent = playedCard(opponentName, round.server_played);
         const outcome = document.createElement("strong");
-        outcome.className = "w-100 text-center";
+        const outcomeColour = round.winner === "you"
+            ? "text-success-emphasis"
+            : round.winner === "server" ? "text-danger-emphasis" : "text-body-secondary";
+        outcome.className = `w-100 text-center ${outcomeColour}`;
         if (round.winner === "you") outcome.textContent = "You win the round!";
         else if (round.winner === "server") outcome.textContent = "Your opponent wins the round.";
         else outcome.textContent = "Draw — both cards are discarded.";

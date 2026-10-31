@@ -30,6 +30,10 @@ private games in a dropdown. **Join game** reveals the game-ID input and open
 public games list, with a count pill when public games are available; private
 games can be joined using their shareable game ID. Online
 games synchronize through server-side state and expire after 24 hours. The
+played-card labels show signed-in usernames (captured when each PvP player
+creates or joins the game), otherwise "You" and "Opponent"; solo opponents
+use their bot name. Round outcomes
+are green for your win, red for an opponent win, and neutral for a tie.
 draw-pile count is shown in-game; when it cannot supply both players, discarded
 cards are shuffled back in while won cards stay out of play. It follows the
 elemental card rules from the
