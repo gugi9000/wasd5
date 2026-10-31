@@ -8,6 +8,10 @@
       <input name="username" class="form-control" />
     </div>
     <div class="mb-3">
+      <label class="form-label" for="display-name">Display Name <span class="text-muted small">(optional; blank uses username)</span></label>
+      <input id="display-name" name="display_name" class="form-control" maxlength="100" />
+    </div>
+    <div class="mb-3">
       <label class="form-label">Password</label>
       <input name="password" type="password" class="form-control" />
     </div>

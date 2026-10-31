@@ -1,0 +1,19 @@
+{% extends "base" %}
+{% block title %}Pages admin{% endblock title %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/admin">Admin</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Pages</li>
+    </ol>
+</nav>
+<h2>Pages admin</h2>
+<a href="/admin/pages/new" class="btn btn-primary my-3">Create new page</a>
+<ul>
+    {% for page in pages %}
+    <li><a href="/admin/pages/edit/{{ page.slug }}">#{{ page.id }} {{ page.title }}</a>{% if page.hidden %} (hidden draft){% endif %}</li>
+    {% else %}
+    <li class="text-muted">No pages yet.</li>
+    {% endfor %}
+</ul>
+{% endblock content %}

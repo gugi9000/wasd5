@@ -51,7 +51,7 @@ enum Commands {
     Import {
         #[arg(default_value = "pages")]
         directory: PathBuf,
-        /// Attribute imports to this existing user's username
+        /// Attribute imports to this existing user's Display Name
         #[arg(long)]
         creator_id: i32,
     },
@@ -179,10 +179,10 @@ fn main() -> Result<(), pages::Error> {
             let user: User = wasd5::schema::users::table
                 .find(creator_id)
                 .first(&mut conn)?;
-            let count = pages::import_markdown(&mut conn, &directory, &user.username)?;
+            let count = pages::import_markdown(&mut conn, &directory, user.display_name())?;
             println!(
                 "Imported {count} pages; creator: {} (user {creator_id}). Existing SQL pages were left unchanged.",
-                user.username
+                user.display_name()
             );
         }
     }

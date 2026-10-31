@@ -44,6 +44,7 @@ pub fn sessions() -> AdHoc {
             let names = [
                 "user_id",
                 "username",
+                "display_name",
                 "user_role",
                 "session_expires",
                 "session_version",
@@ -57,7 +58,8 @@ pub fn sessions() -> AdHoc {
             };
             match result {
                 Ok(Some(user)) => {
-                    for (name, value) in [("username", user.username), ("user_role", user.role)] {
+                    let display_name = user.display_name().to_owned();
+                    for (name, value) in [("username", user.username), ("display_name", display_name), ("user_role", user.role)] {
                         if jar.get_private(name).is_none_or(|c| c.value() != value) {
                             jar.add_private(Cookie::new(name, value));
                         }

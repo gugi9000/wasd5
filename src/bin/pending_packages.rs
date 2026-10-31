@@ -190,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         use wasd5::schema::users::dsl::*;
         users.filter(id.eq_any(&user_ids)).load::<User>(&mut conn)?
     };
-    user_list.sort_by(|a, b| a.username.cmp(&b.username));
+    user_list.sort_by(|a, b| a.display_name().cmp(b.display_name()));
 
     // ── Print summary ─────────────────────────────────────────────────────────
     let total: usize = by_user.values().map(|v| v.len()).sum();
@@ -211,7 +211,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
             .map(|e| format!("<{}>", e))
             .unwrap_or_else(|| "(no email)".to_string());
 
-        println!("  {} {}:", u.username, email_label);
+        println!("  {} {}:", u.display_name(), email_label);
         for p in pkgs {
             let tracking = p.tracking_id.as_deref().unwrap_or("—");
             println!(
@@ -241,21 +241,21 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
         let subject = format!("📦 {} pending package(s) waiting for you", pkgs.len());
         if u.disabled {
-            println!("Skipping disabled account {}", u.username);
+            println!("Skipping disabled account {}", u.display_name());
             skipped += 1;
             continue;
         }
-        let plain = build_plain(&u.username, pkgs, &site_url);
-        let html = build_html(&u.username, pkgs, &site_url);
+        let plain = build_plain(u.display_name(), pkgs, &site_url);
+        let html = build_html(u.display_name(), pkgs, &site_url);
 
         match &u.email {
             None => {
-                println!("[skip]  {} — no email address registered", u.username);
+                println!("[skip]  {} — no email address registered", u.display_name());
                 skipped += 1;
             }
             Some(to_addr) => {
                 if args.dry_run {
-                    println!("[dry-run]  {} <{}>", u.username, to_addr);
+                    println!("[dry-run]  {} <{}>", u.display_name(), to_addr);
                     println!("  Subject : {}", subject);
                     println!("  Plain text body:");
                     for line in plain.lines() {
@@ -265,11 +265,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
                 } else {
                     match send_email(&smtp, to_addr, &subject, &plain, &html) {
                         Ok(()) => {
-                            println!("[sent]  {} <{}>", u.username, to_addr);
+                            println!("[sent]  {} <{}>", u.display_name(), to_addr);
                             sent += 1;
                         }
                         Err(e) => {
-                            eprintln!("[error] {} <{}>: {}", u.username, to_addr, e);
+                            eprintln!("[error] {} <{}>: {}", u.display_name(), to_addr, e);
                         }
                     }
                 }

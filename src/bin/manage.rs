@@ -686,7 +686,7 @@ fn main() -> Result<(), Error> {
         io::stdin().read_line(&mut username)?;
         let password = rpassword::prompt_password("Admin password: ")?;
         let remote = Remote::login(origin.clone(), username.trim().to_owned(), password)?;
-        let attribution = remote.username.clone();
+        let attribution = remote.display_name.clone();
         (Store::Remote(remote), origin.to_string(), attribution)
     } else {
         let database = args

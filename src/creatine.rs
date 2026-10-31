@@ -101,12 +101,11 @@ pub fn creatine_index(
     year: Option<i32>,
     month: Option<u32>,
     navigation: crate::PageNavigation,
+    viewer: crate::comics::Viewer,
 ) -> Result<Template, Redirect> {
     let user_id = get_session_user_id(jar).ok_or_else(|| Redirect::to("/admin/login"))?;
 
-    let username = wasd5::auth::cookie(jar, "username")
-        .map(|c| c.value().to_string())
-        .unwrap_or_else(|| "User".to_string());
+    let username = viewer.display_name().ok_or_else(|| Redirect::to("/admin/login"))?;
 
     let now = Utc::now();
     let today = now.format("%Y-%m-%d").to_string();

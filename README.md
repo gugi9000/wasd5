@@ -16,6 +16,21 @@ and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space
 hard-drops. Tetris scores are submitted once per server-issued game run, but
 gameplay is client-side and scores are not independently replay-validated.
 
+The admin dashboard at `/admin` links to **Pages admin** at `/admin/pages`,
+where administrators can list, create and edit pages. Navigation shows **Login**
+for guests and an **Admin** dropdown with the dashboard's links and signed-in
+Display Name for authenticated users. Individual admin routes retain their access checks.
+
+Users have a **Display Name**, editable in browser user administration and in
+local or remote `manage`. It is optional: blank names fall back to the login
+username. Display Names may contain up to 100 characters without control
+characters; they do not change login credentials and need not be unique.
+The migration initializes existing Display Names from usernames. Account menus,
+scoreboards (including existing account scores), card-game labels, comic authors,
+reminder greetings and new page attribution use Display Names. Historical page
+attribution remains unchanged. Account scores and PvP labels resolve current
+Display Names when loaded.
+
 Cards Elemental is available at `/games/cards-elemental` as a solo game against
 the server or as an online two-player game. Choose **Tosser** for random solo
 play, **Pro** for a strategic opponent, or **Pro2** for stronger colour-pair
@@ -30,8 +45,7 @@ private games in a dropdown. **Join game** reveals the game-ID input and open
 public games list, with a count pill when public games are available; private
 games can be joined using their shareable game ID. Online
 games synchronize through server-side state and expire after 24 hours. The
-played-card labels show signed-in usernames (captured when each PvP player
-creates or joins the game), otherwise "You" and "Opponent"; solo opponents
+played-card labels show signed-in Display Names, otherwise "You" and "Opponent"; solo opponents
 use their bot name. Round outcomes
 are green for your win, red for an opponent win, and neutral for a tie.
 draw-pile count is shown in-game; when it cannot supply both players, discarded
@@ -104,7 +118,7 @@ connection or write transaction is held while the editor is open.
 Sections:
 
 - **Users:** create/edit accounts, reset passwords, change roles/email and
-  creatine reminder settings, disable or re-enable. Passwords are masked and
+  Display Names, creatine reminder settings, disable or re-enable. Passwords are masked and
   never shown in details. Blank passwords keep the existing hash when editing.
   `d` disables rather than deleting; authored content and logs remain intact.
   Edit `Disabled` to false to restore access. Disabling, re-enabling, changing
@@ -158,7 +172,7 @@ It prompts for an **active admin** username and a masked password. All sections,
 forms, revision/conflict checks, and local system-editor integration remain
 available. Remote mode never opens a local database; `--database` and
 `--editor-name` cannot be combined with `--remote`. Remote page attribution is
-always the signed-in username, enforced by the server.
+always the signed-in Display Name, enforced by the server.
 
 Remote access is **disabled by default**, independently of calendar access.
 Configure exact client IP addresses on the **server**, then restart the updated
@@ -344,7 +358,7 @@ cargo run --bin pages -- import --creator-id 1
 
 The import is transactional, preserves available filesystem timestamps, and
 never overwrites existing SQL pages. Original authors and old revisions cannot
-be reconstructed; user 1's username is recorded as creator and initial editor.
+be reconstructed; user 1's Display Name is recorded as creator and initial editor.
 The old `pages` directory is retained as a backup and is never read by the site.
 Repeated imports skip existing slugs. If an old `landing.md` exists, it is
 imported as a separate page; the homepage uses `landing/landing`.
@@ -354,7 +368,7 @@ content or visibility changes save a complete revision; unchanged saves do not.
 Admins can inspect revision snapshots from the edit form or the CLI. Hidden
 drafts are only visible to signed-in admins, including by direct URL. The
 dashboard lists drafts so they can be found and published. Browser edits use
-the signed-in username for attribution.
+the signed-in Display Name for attribution.
 
 Markdown articles and homepage content support tables and task lists.
 Use `- [ ] Task` for an unchecked box and `- [x] Task` for a checked box.

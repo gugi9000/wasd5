@@ -20,6 +20,9 @@ enum Commands {
     CreateUser {
         /// username
         username: String,
+        /// Public name (blank uses username)
+        #[arg(long)]
+        display_name: Option<String>,
         /// password
         password: String,
         /// role (admin/member)
@@ -44,6 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     match cli.command {
         Commands::CreateUser {
             username,
+            display_name,
             password,
             role,
         } => {
@@ -58,8 +62,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
                 email: None,
             };
             let mut conn = pool.get()?;
-            diesel::insert_into(users).values(&new).execute(&mut conn)?;
-            println!("created user {}", username);
+            let display_name = models::normalize_display_name(display_name.as_deref())?;
+            diesel::insert_into(users).values((&new, wasd5::schema::users::display_name.eq(&display_name))).execute(&mut conn)?;
+            println!("created user {}", display_name.as_deref().unwrap_or(&username));
         }
         Commands::ListUsers => {
             use wasd5::schema::users::dsl::{created_at, users};

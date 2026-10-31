@@ -34,7 +34,7 @@ mod tetris;
 use admin::{
     admin_calendar_settings_get, admin_create_picture_folder, admin_edit_page_get,
     admin_edit_page_post, admin_files_get, admin_index, admin_landing_get, admin_landing_post,
-    admin_login_get, admin_login_post, admin_logout, admin_pages_new_get, admin_pages_new_post,
+    admin_login_get, admin_login_post, admin_logout, admin_pages_index, admin_pages_new_get, admin_pages_new_post,
     admin_pictures_get, admin_rename_move_picture, admin_update_calendar_allowed_ips,
     admin_upload_file, admin_upload_picture, admin_users, admin_users_create, admin_users_new,
     admin_users_update, create_user, list_users,
@@ -48,6 +48,13 @@ use helpers::format_modified;
 use packages::{create_package, delete_package, list_packages, mark_received, update_tracking};
 
 const STATIC_DIR: &str = "static";
+
+#[get("/api/navigation/account")]
+fn navigation_account(viewer: comics::Viewer) -> comics::Private<rocket::serde::json::Json<serde_json::Value>> {
+    comics::Private(rocket::serde::json::Json(serde_json::json!({
+        "username": viewer.display_name(),
+    })))
+}
 
 #[derive(Serialize, Clone)]
 pub(crate) struct PageListing {
@@ -496,6 +503,8 @@ async fn main() -> Result<(), rocket::Error> {
                 admin_login_post,
                 admin_logout,
                 admin_index,
+                admin_pages_index,
+                navigation_account,
                 admin_users,
                 admin_users_new,
                 admin_users_create,
@@ -585,7 +594,13 @@ mod page_tests {
                     admin_login_post,
                     admin_logout,
                     admin_index,
+                    admin_pages_index,
+                    navigation_account,
                     admin_pages_new_get,
+                    admin_users,
+                    admin_users_new,
+                    admin_users_create,
+                    admin_users_update,
                     admin_pages_new_post,
                     admin_edit_page_get,
                     admin_edit_page_post,
@@ -626,6 +641,80 @@ mod page_tests {
             .next()
             .unwrap()
             .to_string()
+    }
+
+    #[test]
+    fn pages_admin_is_separate_and_account_navigation_tracks_login() {
+        let (client, _dir, pool) = client();
+        let response = client.get("/api/navigation/account").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.headers().get_one("Cache-Control"), Some("private, no-store"));
+        let account: serde_json::Value = response.into_json().unwrap();
+        assert!(account["username"].is_null());
+        assert_eq!(client.get("/admin/pages").dispatch().headers().get_one("Location"), Some("/admin/login"));
+
+        login(&client);
+        let mut conn = pool.get().unwrap();
+        page_store::create(&mut conn, "test-admin-page", "# ADMIN_PAGE_TITLE", "admin", true).unwrap();
+        let dashboard = client.get("/admin").dispatch().into_string().unwrap();
+        assert!(dashboard.contains("href=\"/admin/pages\""));
+        assert!(!dashboard.contains("href=\"/admin/pages/edit/test-admin-page\""));
+        let pages = client.get("/admin/pages").dispatch();
+        assert_eq!(pages.status(), Status::Ok);
+        let pages = pages.into_string().unwrap();
+        assert!(pages.contains("href=\"/admin/pages/edit/test-admin-page\""));
+        assert!(pages.contains("(hidden draft)"));
+        assert!(pages.contains("href=\"/admin/pages/new\""));
+        let account: serde_json::Value = client.get("/api/navigation/account").dispatch().into_json().unwrap();
+        assert_eq!(account["username"], "admin");
+        diesel::update(schema::users::table.filter(schema::users::username.eq("admin")))
+            .set(schema::users::display_name.eq(Some("Admin Display")))
+            .execute(&mut conn).unwrap();
+        let account: serde_json::Value = client.get("/api/navigation/account").dispatch().into_json().unwrap();
+        assert_eq!(account["username"], "Admin Display");
+        client.get("/admin/logout").dispatch();
+        let account: serde_json::Value = client.get("/api/navigation/account").dispatch().into_json().unwrap();
+        assert!(account["username"].is_null());
+
+        diesel::update(schema::users::table.filter(schema::users::username.eq("admin")))
+            .set(schema::users::role.eq("member")).execute(&mut conn).unwrap();
+        client.post("/admin/login").header(ContentType::Form)
+            .body("username=admin&password=password").dispatch();
+        let account: serde_json::Value = client.get("/api/navigation/account").dispatch().into_json().unwrap();
+        assert_eq!(account["username"], "Admin Display");
+        assert_eq!(client.get("/admin/pages").dispatch().headers().get_one("Location"), Some("/admin/login"));
+    }
+
+    #[test]
+    fn browser_user_forms_save_display_names_and_new_attribution_uses_them() {
+        let (client, _dir, pool) = client();
+        let csrf = login(&client);
+        let response = client.post("/admin/users").header(ContentType::Form)
+            .body(format!("username=new-login&password=password&display_name=New+Display&role=member&csrf={csrf}"))
+            .dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        let mut conn = pool.get().unwrap();
+        let user = schema::users::table.filter(schema::users::username.eq("new-login"))
+            .first::<models::User>(&mut conn).unwrap();
+        assert_eq!(user.display_name(), "New Display");
+        let html = client.get("/admin/users").dispatch().into_string().unwrap();
+        assert!(html.contains("name=\"display_name\""));
+        assert!(html.contains("New Display"));
+        let response = client.post(format!("/admin/users/{}/update", user.id)).header(ContentType::Form)
+            .body(format!("display_name=Updated+Display&role=member&csrf={csrf}")).dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        let user = schema::users::table.find(user.id).first::<models::User>(&mut conn).unwrap();
+        assert_eq!(user.display_name(), "Updated Display");
+        let response = client.post(format!("/admin/users/{}/update", user.id)).header(ContentType::Form)
+            .body(format!("display_name={}&role=member&csrf={csrf}", "x".repeat(101))).dispatch();
+        assert_eq!(response.status(), Status::UnprocessableEntity);
+        diesel::update(schema::users::table.filter(schema::users::username.eq("admin")))
+            .set(schema::users::display_name.eq(Some("Admin Display"))).execute(&mut conn).unwrap();
+        let response = client.post("/admin/pages/new").header(ContentType::Form)
+            .body(format!("slug=display-name-page&content=%23+Page&csrf={csrf}")).dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        let page = page_store::by_slug(&mut conn, "display-name-page").unwrap().unwrap();
+        assert_eq!(page.creator, "Admin Display");
     }
 
     #[test]

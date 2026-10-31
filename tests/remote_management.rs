@@ -457,9 +457,13 @@ fn remote_store_round_trip_over_real_http_preserves_local_editor_workflow() {
     let dir = tempfile::tempdir().unwrap();
     let pool = pool(&dir);
     let server = server(pool.clone());
+    diesel::update(wasd5::schema::users::table.filter(wasd5::schema::users::username.eq("admin")))
+        .set(wasd5::schema::users::display_name.eq(Some("Admin Display")))
+        .execute(&mut pool.get().unwrap()).unwrap();
     let origin = management_client::remote_url(&format!("http://{}", server.address)).unwrap();
     let remote = Remote::login(origin, "admin".into(), "password".into()).unwrap();
     assert_eq!(remote.username, "admin");
+    assert_eq!(remote.display_name, "Admin Display");
     let mut store = Store::Remote(remote);
     for section in Section::ALL {
         store.list(section).unwrap();
@@ -492,7 +496,7 @@ fn remote_store_round_trip_over_real_http_preserves_local_editor_workflow() {
         pages::history(&mut pool.get().unwrap(), record.id)
             .unwrap()
             .iter()
-            .all(|r| r.editor == "admin")
+            .all(|r| r.editor == "Admin Display")
     );
     store.logout().unwrap();
     assert!(store.list(Section::Users).is_err());

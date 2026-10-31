@@ -37,6 +37,7 @@ pub struct Remote {
     origin: Url,
     token: String,
     pub username: String,
+    pub display_name: String,
 }
 
 impl Remote {
@@ -61,6 +62,7 @@ impl Remote {
             client,
             origin,
             token: login.token,
+            display_name: login.display_name.unwrap_or_else(|| login.username.clone()),
             username: login.username,
         })
     }
@@ -286,6 +288,7 @@ mod tests {
             origin,
             token: "test-session".into(),
             username: "admin".into(),
+            display_name: "admin".into(),
         };
         let result = remote.write("save", &serde_json::json!({}));
         remote.token.clear();

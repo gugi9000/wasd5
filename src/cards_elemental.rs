@@ -175,6 +175,8 @@ struct OnlineGameState {
     player_tokens: [Option<String>; 2],
     #[serde(default)]
     player_names: [Option<String>; 2],
+    #[serde(default)]
+    player_user_ids: [Option<i32>; 2],
     starter: usize,
     pending: Option<OnlinePlayedCard>,
     round: u32,
@@ -321,6 +323,7 @@ fn new_online_state(id: &Uuid, first_token: String) -> OnlineGameState {
         winnings: [Vec::new(), Vec::new()],
         player_tokens: [Some(first_token), None],
         player_names: [None, None],
+        player_user_ids: [None, None],
         starter: if solo_state.starter == Side::You {
             0
         } else {
@@ -400,6 +403,26 @@ fn online_view(state: &OnlineGameState, seat: usize, game_id: &str) -> GameView 
 
 fn new_token() -> String {
     Uuid::new_v4().simple().to_string()
+}
+
+fn online_display_view(conn: &mut diesel::SqliteConnection, state: &OnlineGameState, seat: usize, id: &str) -> GameResult<GameView> {
+    let names = crate::models::account_display_names(conn, state.player_user_ids.into_iter().flatten()).map_err(internal)?;
+    let mut view = online_view(state, seat, id);
+    let mut display_names = state.player_names.clone();
+    for player in 0..2 {
+        if let Some(user_id) = state.player_user_ids[player] {
+            display_names[player] = names.get(&user_id).cloned();
+        } else if let Some(username) = &state.player_names[player] {
+            let user = crate::schema::users::table.filter(crate::schema::users::username.eq(username))
+                .first::<crate::models::User>(conn).optional().map_err(internal)?;
+            if let Some(user) = user {
+                display_names[player] = Some(user.display_name().to_owned());
+            }
+        }
+    }
+    view.your_name = display_names[seat].clone();
+    view.opponent_name = display_names[1 - seat].clone();
+    Ok(view)
 }
 
 fn online_cookie_value(id: &str, seat: usize, token: &str) -> String {
@@ -640,7 +663,7 @@ fn index(
         context! {
             pages: navigation.0,
             csrf: crate::ensure_csrf(jar),
-            username: viewer.username().unwrap_or(""),
+            username: viewer.display_name().unwrap_or(""),
             statistics,
         },
     )))
@@ -814,7 +837,8 @@ fn create_online_game(
     let id = uuid.as_hyphenated().to_string();
     let token = new_token();
     let mut state = new_online_state(&uuid, token.clone());
-    state.player_names[0] = viewer.username().map(str::to_owned);
+    state.player_names[0] = viewer.display_name().map(str::to_owned);
+    state.player_user_ids[0] = viewer.identity().map(|(id, _)| id);
     let state_json = serde_json::to_string(&state).map_err(internal)?;
     let now = chrono::Utc::now().timestamp_millis();
     let mut conn = pool.get().map_err(internal)?;
@@ -837,7 +861,7 @@ fn create_online_game(
         ONLINE_COOKIE,
         online_cookie_value(&id, 0, &token),
     ));
-    Ok(Private(Json(online_view(&state, 0, &id))))
+    Ok(Private(Json(online_display_view(&mut conn, &state, 0, &id)?)))
 }
 
 #[get("/games/cards-elemental/api/online/open")]
@@ -892,7 +916,8 @@ fn join_online_game(
         ));
     }
     state.player_tokens[1] = Some(token.clone());
-    state.player_names[1] = viewer.username().map(str::to_owned);
+    state.player_names[1] = viewer.display_name().map(str::to_owned);
+    state.player_user_ids[1] = viewer.identity().map(|(id, _)| id);
     state.status = GameStatus::Playing;
     let new_state = serde_json::to_string(&state).map_err(internal)?;
     let now = chrono::Utc::now().timestamp_millis();
@@ -920,7 +945,7 @@ fn join_online_game(
         ONLINE_COOKIE,
         online_cookie_value(&id, 1, &token),
     ));
-    Ok(Private(Json(online_view(&state, 1, &id))))
+    Ok(Private(Json(online_display_view(&mut conn, &state, 1, &id)?)))
 }
 
 #[get("/games/cards-elemental/api/online/current")]
@@ -936,7 +961,7 @@ fn current_online_game(
         Ok(stored) => {
             let state = read_online_state(&stored)?;
             verify_online_access(&state, seat, &token)?;
-            Ok(Private(Json(Some(online_view(&state, seat, &id)))))
+            Ok(Private(Json(Some(online_display_view(&mut conn, &state, seat, &id)?))))
         }
         Err((status, _)) if status == Status::NotFound => {
             jar.remove_private(Cookie::new(ONLINE_COOKIE, ""));
@@ -1078,7 +1103,7 @@ fn play_online_card(
             "The game changed before your card was played. Please try again.".into(),
         ));
     }
-    Ok(Private(Json(online_view(&state, seat, &id))))
+    Ok(Private(Json(online_display_view(&mut conn, &state, seat, &id)?)))
 }
 
 #[cfg(test)]
@@ -1212,6 +1237,22 @@ mod tests {
             .into_string()
             .unwrap();
         assert!(html.contains("data-username=\"Alice\""));
+        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Alice")))
+            .set(crate::schema::users::display_name.eq(Some("Alice Display")))
+            .execute(&mut conn).unwrap();
+        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Bob")))
+            .set(crate::schema::users::display_name.eq(Some("Bob Display")))
+            .execute(&mut conn).unwrap();
+        let current: serde_json::Value = host.get("/games/cards-elemental/api/online/current")
+            .dispatch().into_json().unwrap();
+        assert_eq!(current["your_name"], "Alice Display");
+        assert_eq!(current["opponent_name"], "Bob Display");
+        let current: serde_json::Value = guest.get("/games/cards-elemental/api/online/current")
+            .dispatch().into_json().unwrap();
+        assert_eq!(current["your_name"], "Bob Display");
+        assert_eq!(current["opponent_name"], "Alice Display");
+        let html = host.get("/games/cards-elemental").dispatch().into_string().unwrap();
+        assert!(html.contains("data-username=\"Alice Display\""));
     }
 
     #[test]

@@ -63,7 +63,7 @@ impl<'r, T: Responder<'r, 'static>> Responder<'r, 'static> for Private<T> {
 #[derive(Serialize)]
 pub struct ComicUser {
     id: i32,
-    username: String,
+    display_name: String,
     admin: bool,
 }
 
@@ -82,7 +82,7 @@ impl<'r> FromRequest<'r> for Viewer {
         match user {
             Ok(user) => Outcome::Success(Viewer(user.map(|u| ComicUser {
                 id: u.id,
-                username: u.username,
+                display_name: u.display_name().to_owned(),
                 admin: u.role == "admin",
             }))),
             Err(error) => {
@@ -98,8 +98,8 @@ impl Viewer {
         self.0.as_ref().map(|user| (user.id, user.admin))
     }
 
-    pub(crate) fn username(&self) -> Option<&str> {
-        self.0.as_ref().map(|user| user.username.as_str())
+    pub(crate) fn display_name(&self) -> Option<&str> {
+        self.0.as_ref().map(|user| user.display_name.as_str())
     }
 
     fn user(&self) -> Result<&ComicUser, ComicError> {
@@ -321,13 +321,12 @@ fn album(
         .map_err(internal)?;
     let owner = crate::schema::users::table
         .find(album.owner_id)
-        .select(crate::schema::users::username)
-        .first::<String>(&mut conn)
+        .first::<crate::models::User>(&mut conn)
         .map_err(internal)?;
     Ok(Private(Template::render(
         "comics/album",
         context! {
-            pages: navigation.0, album: album, strips: items, can_manage: manage, owner: owner,
+            pages: navigation.0, album: album, strips: items, can_manage: manage, owner: owner.display_name(),
         },
     )))
 }

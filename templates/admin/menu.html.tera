@@ -1,0 +1,37 @@
+<a href="/admin/pages" class="{{ admin_menu_class }}">
+    <strong>Pages admin</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">View, create and edit markdown pages</div>{% endif %}
+</a>
+<a href="/admin/landing" class="{{ admin_menu_class }}">
+    <strong>Edit landing page</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Edit the homepage content</div>{% endif %}
+</a>
+<a href="/admin/users" class="{{ admin_menu_class }}">
+    <strong>Manage users</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">View and create user accounts</div>{% endif %}
+</a>
+<a href="/admin/files" class="{{ admin_menu_class }}">
+    <strong>Files</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Upload and manage files</div>{% endif %}
+</a>
+<a href="/admin/pictures" class="{{ admin_menu_class }}">
+    <strong>Pictures</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Upload and manage images</div>{% endif %}
+</a>
+<a href="/creatine" class="{{ admin_menu_class }}">
+    <strong>Creatine tracker</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Log daily creatine intake &amp; manage reminders</div>{% endif %}
+</a>
+<a href="/admin/calendar" class="{{ admin_menu_class }}">
+    <strong>Calendar settings</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Manage calendar IP allowlist</div>{% endif %}
+</a>
+<a href="/calendar" class="{{ admin_menu_class }}">
+    <strong>Calendar</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">View the calendar</div>{% endif %}
+</a>
+<a href="/packages" class="{{ admin_menu_class }}">
+    <strong>Packages</strong>
+    {% if admin_menu_descriptions %}<div class="text-muted small">Manage packages</div>{% endif %}
+</a>
+<a href="/admin/logout" class="{{ admin_menu_class }} text-danger"><strong>Logout</strong></a>

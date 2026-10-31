@@ -10,7 +10,7 @@
   {% endif %}
 </div>
 <p>Explore comic albums and their strips.</p>
-{% if user %}<p class="text-muted small">Signed in as {{ user.username }}. Your drafts are shown here; visitors only see published albums.{% if user.admin %} As an admin, you can also manage other users' albums.{% endif %}</p>{% endif %}
+{% if user %}<p class="text-muted small">Signed in as {{ user.display_name }}. Your drafts are shown here; visitors only see published albums.{% if user.admin %} As an admin, you can also manage other users' albums.{% endif %}</p>{% endif %}
 {% if albums | length == 0 %}
 <p class="text-muted">No albums to show yet.</p>
 {% else %}

@@ -153,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
     for u in &needs_reminder {
         let email_label = u.email.as_deref().unwrap_or("(no email)");
-        println!("  {} <{}>", u.username, email_label);
+        println!("  {} <{}>", u.display_name(), email_label);
     }
 
     if needs_reminder.is_empty() {
@@ -177,11 +177,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
             None => continue, // already filtered, but be safe
         };
 
-        let plain = build_plain(&u.username, &site_url);
-        let html = build_html(&u.username, &site_url);
+        let plain = build_plain(u.display_name(), &site_url);
+        let html = build_html(u.display_name(), &site_url);
 
         if args.dry_run {
-            println!("\n[dry-run] {} <{}>", u.username, to_addr);
+            println!("\n[dry-run] {} <{}>", u.display_name(), to_addr);
             println!("  Subject : {}", subject);
             println!("  Body preview:");
             for line in plain.lines() {
@@ -190,11 +190,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         } else {
             match send_email(&smtp, to_addr, subject, &plain, &html) {
                 Ok(()) => {
-                    println!("[sent]  {} <{}>", u.username, to_addr);
+                    println!("[sent]  {} <{}>", u.display_name(), to_addr);
                     sent += 1;
                 }
                 Err(e) => {
-                    eprintln!("[error] {} <{}>: {}", u.username, to_addr, e);
+                    eprintln!("[error] {} <{}>: {}", u.display_name(), to_addr, e);
                 }
             }
         }

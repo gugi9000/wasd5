@@ -18,6 +18,44 @@ pub struct User {
     pub creatine_reminder: i32,
     pub disabled: bool,
     pub session_version: i64,
+    pub display_name: Option<String>,
+}
+
+impl User {
+    pub fn display_name(&self) -> &str {
+        self.display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&self.username)
+    }
+}
+
+pub fn normalize_display_name(
+    name: Option<&str>,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let name = name.map(str::trim).filter(|name| !name.is_empty());
+    if name.is_some_and(|name| name.chars().count() > 100 || name.chars().any(char::is_control)) {
+        return Err(
+            "Display Name must be at most 100 characters without control characters".into(),
+        );
+    }
+    Ok(name.map(str::to_owned))
+}
+
+pub fn account_display_names(
+    conn: &mut SqliteConnection,
+    ids: impl IntoIterator<Item = i32>,
+) -> diesel::QueryResult<std::collections::HashMap<i32, String>> {
+    users::table
+        .filter(users::id.eq_any(ids.into_iter().collect::<Vec<_>>()))
+        .load::<User>(conn)
+        .map(|accounts| {
+            accounts
+                .into_iter()
+                .map(|user| (user.id, user.display_name().to_owned()))
+                .collect()
+        })
 }
 
 #[derive(Insertable)]

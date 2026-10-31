@@ -154,7 +154,7 @@ impl<'r> FromRequest<'r> for Trusted {
 pub struct Admin {
     id: i32,
     version: i64,
-    username: String,
+    display_name: String,
     token: String,
 }
 
@@ -200,7 +200,7 @@ impl<'r> FromRequest<'r> for Admin {
             Ok(Self {
                 id,
                 version,
-                username: user.username,
+                display_name: user.display_name().to_owned(),
                 token: token.into(),
             })
         })();
@@ -253,6 +253,8 @@ pub struct Login {
 pub struct LoginResponse {
     pub token: String,
     pub username: String,
+    #[serde(default)]
+    pub display_name: Option<String>,
 }
 
 #[post("/api/manage/login", format = "json", data = "<payload>")]
@@ -318,6 +320,7 @@ fn login(
     auth.attempts.remove(&trusted.0);
     Ok(Json(LoginResponse {
         token,
+        display_name: Some(user.display_name().to_owned()),
         username: user.username,
     }))
 }
@@ -371,7 +374,7 @@ fn save(admin: Admin, payload: Json<Save>, pool: &State<DbPool>) -> Result<Statu
             .values
             .as_object_mut()
             .ok_or((Status::UnprocessableEntity, "Expected form fields".into()))?;
-        values.insert("editor".into(), Value::String(admin.username.clone()));
+        values.insert("editor".into(), Value::String(admin.display_name.clone()));
     }
     management::save_authorized(
         &mut conn,
@@ -395,7 +398,7 @@ fn remove(admin: Admin, payload: Json<Selected>, pool: &State<DbPool>) -> Result
         &mut conn,
         payload.section,
         &payload.record,
-        &admin.username,
+        &admin.display_name,
         |conn| {
             active_admin(conn, admin.id, admin.version)
                 .map(|_| ())

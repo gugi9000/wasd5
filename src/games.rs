@@ -281,12 +281,19 @@ fn game_view(game: &Game) -> GameResult<GameView> {
 }
 
 fn load_leaderboard(conn: &mut SqliteConnection, mode_name: &str) -> GameResult<Vec<Score>> {
-    scores::table
+    let mut scores = scores::table
         .filter(scores::mode.eq(mode_name))
         .order((scores::elapsed_ms.asc(), scores::created_at.asc()))
         .limit(10)
         .load::<Score>(conn)
-        .map_err(internal)
+        .map_err(internal)?;
+    let names = crate::models::account_display_names(conn, scores.iter().filter_map(|score| score.user_id)).map_err(internal)?;
+    for score in &mut scores {
+        if let Some(name) = score.user_id.and_then(|id| names.get(&id)) {
+            score.player_name.clone_from(name);
+        }
+    }
+    Ok(scores)
 }
 
 #[get("/games/minesweeper")]
@@ -306,7 +313,7 @@ fn index(
             pages: navigation.0,
             csrf: crate::ensure_csrf(jar),
             signed_in: viewer.identity().is_some(),
-            username: viewer.username().unwrap_or(""),
+            username: viewer.display_name().unwrap_or(""),
             easy_scores: easy_scores,
             intermediate_scores: intermediate_scores,
             advanced_scores: advanced_scores,
@@ -533,7 +540,7 @@ fn submit_score(
             "Scores must be submitted by the same player who started the game.".into(),
         ));
     }
-    let player_name = if let Some(username) = viewer.username() {
+    let player_name = if let Some(username) = viewer.display_name() {
         username.to_owned()
     } else {
         let name = request.player_name.as_deref().unwrap_or("").trim();
@@ -776,6 +783,9 @@ mod tests {
             .into_string()
             .unwrap();
         assert!(signed_page.contains("data-username=\"Trusted\""));
+        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
+            .set(crate::schema::users::display_name.eq(Some("Visible Player")))
+            .execute(&mut pool.get().unwrap()).unwrap();
         let csrf = signed_page
             .split("data-csrf=\"")
             .nth(1)
@@ -831,7 +841,7 @@ mod tests {
             .dispatch();
         assert_eq!(score.status(), Status::Ok);
         let score: serde_json::Value = score.into_json().unwrap();
-        assert_eq!(score["player_name"], "Trusted");
+        assert_eq!(score["player_name"], "Visible Player");
         assert_eq!(
             score["user_id"],
             crate::schema::users::table
@@ -840,5 +850,13 @@ mod tests {
                 .first::<i32>(&mut pool.get().unwrap())
                 .unwrap()
         );
+        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
+            .set(crate::schema::users::display_name.eq(Some("Renamed Player")))
+            .execute(&mut pool.get().unwrap()).unwrap();
+        let boards: serde_json::Value = client.get("/games/minesweeper/api/scores").dispatch().into_json().unwrap();
+        let account_score = boards["easy"].as_array().unwrap().iter()
+            .find(|entry| !entry["user_id"].is_null()).unwrap();
+        assert_eq!(account_score["player_name"], "Renamed Player");
+        assert!(boards["easy"].as_array().unwrap().iter().any(|entry| entry["player_name"] == "Guest"));
     }
 }

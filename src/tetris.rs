@@ -91,11 +91,18 @@ fn csrf(jar: &CookieJar<'_>, token: &str) -> TetrisResult<()> {
 }
 
 fn leaderboard(conn: &mut diesel::SqliteConnection) -> TetrisResult<Vec<Score>> {
-    scores::table
+    let mut scores = scores::table
         .order((scores::score.desc(), scores::created_at.asc()))
         .limit(10)
         .load::<Score>(conn)
-        .map_err(internal)
+        .map_err(internal)?;
+    let names = crate::models::account_display_names(conn, scores.iter().filter_map(|score| score.user_id)).map_err(internal)?;
+    for score in &mut scores {
+        if let Some(name) = score.user_id.and_then(|id| names.get(&id)) {
+            score.player_name.clone_from(name);
+        }
+    }
+    Ok(scores)
 }
 
 #[get("/games/tetris")]
@@ -113,7 +120,7 @@ fn index(
             pages: navigation.0,
             csrf: crate::ensure_csrf(jar),
             signed_in: viewer.identity().is_some(),
-            username: viewer.username().unwrap_or(""),
+            username: viewer.display_name().unwrap_or(""),
             leaderboard: leaderboard,
         },
     )))
@@ -170,7 +177,7 @@ fn submit_score(
         ));
     }
     let identity = viewer.identity().map(|(id, _)| id);
-    let player_name = if let Some(username) = viewer.username() {
+    let player_name = if let Some(username) = viewer.display_name() {
         username.to_owned()
     } else {
         let name = input.player_name.as_deref().unwrap_or("").trim();
@@ -256,6 +263,37 @@ mod tests {
     use crate::db;
     use rocket::http::ContentType;
     use rocket::local::blocking::Client;
+
+    #[test]
+    fn account_scoreboards_resolve_current_display_names_without_changing_guests() {
+        let mut conn = diesel::SqliteConnection::establish(":memory:").unwrap();
+        db::run_migrations(&mut conn).unwrap();
+        diesel::insert_into(crate::schema::users::table).values((
+            crate::models::NewUser {
+                username: "login", password_hash: "unused", role: "member", created_at: 1, email: None,
+            },
+            crate::schema::users::display_name.eq(Some("Visible Player")),
+        )).execute(&mut conn).unwrap();
+        let user_id = crate::schema::users::table.select(crate::schema::users::id).first::<i32>(&mut conn).unwrap();
+        for (run_id, user_id, player_name) in [("account", Some(user_id), "login"), ("guest", None, "Guest")] {
+            diesel::insert_into(runs::table).values(NewRun {
+                id: run_id, user_id, created_at: 1, submitted_at: Some(2),
+            }).execute(&mut conn).unwrap();
+            diesel::insert_into(scores::table).values((
+                scores::run_id.eq(run_id), scores::user_id.eq(user_id), scores::player_name.eq(player_name),
+                scores::score.eq(100), scores::lines.eq(1), scores::level.eq(1), scores::created_at.eq(2),
+            )).execute(&mut conn).unwrap();
+        }
+        let board = leaderboard(&mut conn).unwrap();
+        assert_eq!(board[0].player_name, "Visible Player");
+        assert_eq!(board[1].player_name, "Guest");
+        diesel::update(crate::schema::users::table.find(user_id))
+            .set(crate::schema::users::display_name.eq(Some("Renamed Player"))).execute(&mut conn).unwrap();
+        assert_eq!(leaderboard(&mut conn).unwrap()[0].player_name, "Renamed Player");
+        diesel::update(crate::schema::users::table.find(user_id))
+            .set(crate::schema::users::display_name.eq(None::<String>)).execute(&mut conn).unwrap();
+        assert_eq!(leaderboard(&mut conn).unwrap()[0].player_name, "login");
+    }
 
     #[test]
     fn guest_can_submit_a_run_once_and_leaderboard_sorts_highest_first() {

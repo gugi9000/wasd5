@@ -83,6 +83,7 @@ impl Section {
         let fields = match self {
             Self::Users => vec![
                 ("username", "Username", Text),
+                ("display_name", "Display Name (blank uses username)", Text),
                 ("role", "Role: admin or member", Text),
                 ("email", "Email (optional)", Text),
                 ("password", "Password (blank keeps existing)", Password),
@@ -182,9 +183,10 @@ fn date_string(timestamp: i64) -> Result<String> {
 pub fn list(conn: &mut SqliteConnection, section: Section) -> Result<Vec<Record>> {
     Ok(match section {
         Section::Users => users::table.order(users::username.asc()).load::<models::User>(conn)?
-            .into_iter().map(|u| row(u.id, format!("{} [{}] {}", u.username, u.role,
+            .into_iter().map(|u| row(u.id, format!("{} [{}] {}", u.display_name(), u.role,
                 if u.disabled { "DISABLED" } else { "active" }), json!({
                     "username": u.username, "role": u.role, "email": u.email.unwrap_or_default(),
+                    "display_name": u.display_name.unwrap_or_default(),
                     "password": "", "disabled": u.disabled, "creatine_reminder": u.creatine_reminder != 0,
                 }))).collect(),
         Section::Pages => {
@@ -260,7 +262,7 @@ pub fn defaults(section: Section, attribution: &str) -> Value {
     let today = Utc::now().format("%Y-%m-%d").to_string();
     match section {
         Section::Users => {
-            json!({"username":"","role":"member","email":"","password":"","disabled":false,"creatine_reminder":false})
+            json!({"username":"","display_name":"","role":"member","email":"","password":"","disabled":false,"creatine_reminder":false})
         }
         Section::Pages => {
             json!({"slug":"","editor":attribution,"hidden":true,"content":"# New page\n"})
@@ -288,6 +290,8 @@ pub fn defaults(section: Section, attribution: &str) -> Value {
 #[serde(deny_unknown_fields)]
 struct UserInput {
     username: String,
+    #[serde(default)]
+    display_name: String,
     role: String,
     email: String,
     password: String,
@@ -446,6 +450,7 @@ pub(crate) fn save_authorized(
             Section::Users => {
                 let p: UserInput = serde_json::from_value(values)?;
                 text(&p.username, "Username", 100)?;
+                let display_name = models::normalize_display_name(Some(&p.display_name))?;
                 if !matches!(p.role.as_str(), "admin" | "member" | "user") {
                     return Err("Role must be admin or member (legacy user is also accepted)".into());
                 }
@@ -460,6 +465,7 @@ pub(crate) fn save_authorized(
                     let revoke = old.disabled != p.disabled || old.role != p.role || password.is_some();
                     diesel::update(users::table.find(id)).set((
                         users::username.eq(p.username.trim()), users::role.eq(&p.role), users::email.eq(email),
+                        users::display_name.eq(display_name),
                         users::disabled.eq(p.disabled), users::creatine_reminder.eq(i32::from(p.creatine_reminder)),
                         users::session_version.eq(old.session_version + i64::from(revoke)),
                     )).execute(conn)?;
@@ -469,6 +475,7 @@ pub(crate) fn save_authorized(
                 } else {
                     diesel::insert_into(users::table).values((
                         users::username.eq(p.username.trim()), users::role.eq(&p.role), users::email.eq(email),
+                        users::display_name.eq(display_name),
                         users::password_hash.eq(password.ok_or("A password is required")?), users::created_at.eq(now),
                         users::disabled.eq(p.disabled), users::creatine_reminder.eq(i32::from(p.creatine_reminder)),
                     )).execute(conn)?;

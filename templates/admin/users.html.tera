@@ -14,6 +14,7 @@
       <tr>
         <th style="width:2rem">ID</th>
         <th>Username</th>
+        <th>Display Name</th>
         <th>Email</th>
         <th style="width:8rem">Role</th>
         <th style="width:11rem">Created</th>
@@ -32,6 +33,11 @@
       <tr>
         <td class="text-muted small">{{ u.id }}</td>
         <td class="fw-semibold">{{ u.username }}</td>
+        <td>
+          <input name="display_name" form="uf-{{ u.id }}" value="{{ u.display_name }}"
+                 maxlength="100" class="form-control form-control-sm" aria-label="Display Name"
+                 placeholder="Blank uses username" />
+        </td>
         <td>
           <input type="email"
                  name="email"

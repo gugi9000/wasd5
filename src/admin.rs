@@ -311,6 +311,7 @@ pub(crate) fn admin_login_post(
         if !u.disabled && verify(&f.password, &u.password_hash).unwrap_or(false) {
             jar.add_private(Cookie::new("user_id", u.id.to_string()));
             jar.add_private(Cookie::new("username", u.username.clone()));
+            jar.add_private(Cookie::new("display_name", u.display_name().to_owned()));
             jar.add_private(Cookie::new("user_role", u.role.clone()));
             jar.add_private(Cookie::new("session_version", u.session_version.to_string()));
             let expiry = Utc::now().timestamp() + 24 * 3600;
@@ -334,6 +335,7 @@ pub(crate) fn admin_login_post(
 pub(crate) fn admin_logout(jar: &CookieJar) -> Redirect {
     jar.remove_private(Cookie::new("user_id", ""));
     jar.remove_private(Cookie::new("username", ""));
+    jar.remove_private(Cookie::new("display_name", ""));
     jar.remove_private(Cookie::new("user_role", ""));
     jar.remove_private(Cookie::new("session_expires", ""));
     jar.remove_private(Cookie::new("session_version", ""));
@@ -350,6 +352,20 @@ pub(crate) fn admin_index(
     }
     let pages = navigation.0;
     Ok(Template::render("admin/index", context! { pages: pages }))
+}
+
+#[get("/admin/pages")]
+pub(crate) fn admin_pages_index(
+    jar: &CookieJar,
+    navigation: crate::PageNavigation,
+) -> Result<Template, Redirect> {
+    if !crate::is_admin_cookie(jar) {
+        return Err(Redirect::to("/admin/login"));
+    }
+    Ok(Template::render(
+        "admin/pages",
+        context! { pages: navigation.0 },
+    ))
 }
 
 #[get("/admin/files?<warning>")]
@@ -868,6 +884,7 @@ pub(crate) fn admin_rename_move_picture(
 struct UserDisplay {
     id: i32,
     username: String,
+    display_name: String,
     email: Option<String>,
     role: String,
     created_at_str: String,
@@ -907,6 +924,7 @@ pub(crate) fn admin_users(
                 .unwrap_or_default();
             UserDisplay {
                 id: u.id,
+                display_name: u.display_name().to_owned(),
                 username: u.username,
                 email: u.email,
                 role: u.role,
@@ -940,9 +958,15 @@ pub(crate) fn admin_users_new(
 
 #[derive(FromForm)]
 pub(crate) struct UpdateUserForm {
+    display_name: Option<String>,
     email: Option<String>,
     role: String,
     csrf: String,
+}
+
+fn user_save_error(error: impl std::fmt::Display) -> (Status, String) {
+    eprintln!("Could not save user: {error}");
+    (Status::InternalServerError, "Could not save user; please try again".into())
 }
 
 #[post("/admin/users/<user_id>/update", data = "<form>")]
@@ -951,32 +975,34 @@ pub(crate) fn admin_users_update(
     pool: &State<DbPool>,
     user_id: i32,
     form: Form<UpdateUserForm>,
-) -> Redirect {
+) -> Result<Redirect, (Status, String)> {
     if !crate::is_admin_cookie(jar) {
-        return Redirect::to("/admin/login");
+        return Ok(Redirect::to("/admin/login"));
     }
     let f = form.into_inner();
     if let Some(cookie_csrf) = jar.get_private("csrf") {
         if cookie_csrf.value() != f.csrf.as_str() {
-            return Redirect::to("/admin/users");
+            return Err((Status::Forbidden, "Invalid form token.".into()));
         }
     } else {
-        return Redirect::to("/admin/users");
+        return Err((Status::Forbidden, "Invalid form token.".into()));
     }
     let role_val = if f.role == "admin" { "admin" } else { "member" };
     let email_val: Option<String> = f.email.filter(|s| !s.trim().is_empty());
+    let display_name = models::normalize_display_name(f.display_name.as_deref())
+        .map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
     use crate::schema::users::dsl::{email, id, role, users};
-    if let Ok(mut conn) = pool.get() {
-        let _ = diesel::update(users.filter(id.eq(user_id)))
-            .set((email.eq(email_val), role.eq(role_val)))
-            .execute(&mut conn);
-    }
-    Redirect::to("/admin/users")
+    let mut conn = pool.get().map_err(user_save_error)?;
+    diesel::update(users.filter(id.eq(user_id)))
+        .set((email.eq(email_val), role.eq(role_val), crate::schema::users::display_name.eq(display_name)))
+        .execute(&mut conn).map_err(user_save_error)?;
+    Ok(Redirect::to("/admin/users"))
 }
 
 #[derive(FromForm)]
 pub(crate) struct NewUserForm {
     username: String,
+    display_name: Option<String>,
     password: String,
     role: Option<String>,
     email: Option<String>,
@@ -988,26 +1014,28 @@ pub(crate) fn admin_users_create(
     jar: &CookieJar,
     pool: &State<DbPool>,
     form: Form<NewUserForm>,
-) -> Redirect {
+) -> Result<Redirect, (Status, String)> {
     if !crate::is_admin_cookie(jar) {
-        return Redirect::to("/admin/login");
+        return Ok(Redirect::to("/admin/login"));
     }
     use crate::schema::users::dsl::users;
     let f = form.into_inner();
     if let Some(form_csrf) = f.csrf.as_ref() {
         if let Some(cookie_csrf) = jar.get_private("csrf") {
             if cookie_csrf.value() != form_csrf.as_str() {
-                return Redirect::to("/admin/users");
+                return Err((Status::Forbidden, "Invalid form token.".into()));
             }
         } else {
-            return Redirect::to("/admin/users");
+            return Err((Status::Forbidden, "Invalid form token.".into()));
         }
     } else {
-        return Redirect::to("/admin/users");
+        return Err((Status::Forbidden, "Invalid form token.".into()));
     }
 
     let role_val = f.role.unwrap_or_else(|| "member".to_string());
-    let pw_hash = hash(&f.password, DEFAULT_COST).unwrap_or_else(|_| "".to_string());
+    let pw_hash = hash(&f.password, DEFAULT_COST).map_err(user_save_error)?;
+    let display_name = models::normalize_display_name(f.display_name.as_deref())
+        .map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
     let email_val = f.email.as_deref().filter(|s| !s.is_empty());
     let new = models::NewUser {
         username: f.username.as_str(),
@@ -1016,10 +1044,10 @@ pub(crate) fn admin_users_create(
         created_at: Utc::now().timestamp(),
         email: email_val,
     };
-    if let Ok(mut conn) = pool.get() {
-        let _ = diesel::insert_into(users).values(&new).execute(&mut conn);
-    }
-    Redirect::to("/admin/users")
+    let mut conn = pool.get().map_err(user_save_error)?;
+    diesel::insert_into(users).values((&new, crate::schema::users::display_name.eq(display_name)))
+        .execute(&mut conn).map_err(user_save_error)?;
+    Ok(Redirect::to("/admin/users"))
 }
 
 #[derive(FromForm)]
@@ -1079,7 +1107,7 @@ fn check_page_edit(jar: &CookieJar, csrf: Option<&str>) -> Result<String, Status
     if csrf.is_none() || jar.get_private("csrf").as_ref().map(|c| c.value()) != csrf {
         return Err(Status::Forbidden);
     }
-    wasd5::auth::cookie(jar, "username")
+    wasd5::auth::cookie(jar, "display_name")
         .map(|c| c.value().to_string())
         .filter(|s| !s.trim().is_empty())
         .ok_or(Status::Unauthorized)
@@ -1260,6 +1288,7 @@ pub(crate) fn admin_edit_page_post(
 #[derive(Deserialize)]
 pub(crate) struct CreateUser {
     username: String,
+    display_name: Option<String>,
     password: String,
     role: Option<String>,
     email: Option<String>,
@@ -1286,8 +1315,12 @@ pub(crate) fn create_user(
     };
 
     let mut conn = pool.get().map_err(|_| Status::ServiceUnavailable)?;
+    let display_name_val = models::normalize_display_name(payload.display_name.as_deref()).map_err(|e| {
+        eprintln!("Invalid user Display Name: {e}");
+        Status::UnprocessableEntity
+    })?;
     diesel::insert_into(users)
-        .values(&new)
+        .values((&new, crate::schema::users::display_name.eq(display_name_val)))
         .execute(&mut conn)
         .map_err(|_| Status::InternalServerError)?;
 

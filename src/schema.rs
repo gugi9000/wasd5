@@ -12,6 +12,7 @@ diesel::table! {
         creatine_reminder -> Integer,
         disabled -> Bool,
         session_version -> BigInt,
+        display_name -> Nullable<Text>,
     }
 }
 
