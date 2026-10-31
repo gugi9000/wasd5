@@ -215,7 +215,7 @@
                     hint.textContent = "Waiting for your opponent to play.";
                 }
             } else {
-                const opponentName = game.opponent === "pro" ? "Pro" : "Tosser";
+                const opponentName = { tosser: "Tosser", pro: "Pro", pro2: "Pro2" }[game.opponent];
                 status.textContent = game.server_has_led
                     ? `Round ${game.round}: ${opponentName} has led with a hidden card. Choose your response.`
                     : `Round ${game.round}: you lead against ${opponentName}. Choose a card to play.`;

@@ -18,9 +18,14 @@ gameplay is client-side and scores are not independently replay-validated.
 
 Cards Elemental is available at `/games/cards-elemental` as a solo game against
 the server or as an online two-player game. Choose **Tosser** for random solo
-play or **Pro** for a strategic opponent. Pro weighs progress toward both
-winning sets and the opponent's public collection, without inspecting hidden
-hands, pending cards, or deck order. Public games appear in the open
+play, **Pro** for a strategic opponent, or **Pro2** for stronger colour-pair
+goals and defence against imminent wins via either collection rule. Pro is
+unchanged; Pro2 activates its stronger colour preference only after its won
+pile contains a matching element/colour pair, not while considering a
+hypothetical pair. Before that it uses Pro's collection goals. It penalizes an
+opponent's game-winning capture more heavily than speculative progress.
+Both use only their own hand and public collections/discards, without inspecting
+hidden hands, pending cards, or deck order. Public games appear in the open
 games list; private games can be joined using their shareable game ID. Online
 games synchronize through server-side state and expire after 24 hours. The
 draw-pile count is shown in-game; when it cannot supply both players, discarded
@@ -28,10 +33,31 @@ cards are shuffled back in while won cards stay out of play. It follows the
 elemental card rules from the
 [`cards_elemental`](https://github.com/gugi9000/cards_elemental) reference
 project. There is no leaderboard. Below the rules, persistent backend totals
-show completed public PvP, private PvP, Solo Tosser, and Solo Pro games.
+show completed public PvP, private PvP, Solo Tosser, Solo Pro, and Solo Pro2 games.
 Only a winner or draw counts; abandoned games do not. Totals survive session
 expiry. The migration includes completed sessions still present in the database;
 previously expired sessions cannot be recovered.
+
+### Cards Elemental bot simulator
+
+Run `cargo run --release --bin cards_elemental_sim` for 10,000 Tosser vs Pro
+games. It uses the website's shared card rules and bot strategies, without
+accessing the database or changing website statistics.
+
+```powershell
+cargo run --release --bin cards_elemental_sim -- --games 20000 --player1 tosser --player2 pro --seed 42
+cargo run --release --bin cards_elemental_sim -- --player1 pro --player2 pro
+cargo run --release --bin cards_elemental_sim -- --player1 pro2 --player2 pro --seed 42
+```
+
+The report includes game wins/losses/draws, win rates, total/average/minimum/
+maximum rounds, round wins/losses/draws, and wins by either collection rule
+(or both, counted separately). The opening player is randomized for each game.
+A printed seed allows replaying the same batch. `--max-rounds` defaults to
+10,000 per game; games reaching it are explicitly unfinished, not draws.
+`--help` lists options and available bots. New bots belong in the shared
+`Opponent` enum and `bot_card_index` dispatcher, making them available to
+the simulator's player options too.
 
 ## Management TUI
 

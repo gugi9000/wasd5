@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod cards_elemental_core;
 pub mod db;
 pub mod editor;
 pub mod email;

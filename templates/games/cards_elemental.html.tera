@@ -15,6 +15,7 @@
             <select id="cards-opponent" class="form-select w-auto" aria-label="Solo opponent">
                 <option value="tosser">Tosser (random)</option>
                 <option value="pro">Pro (strategic)</option>
+                <option value="pro2">Pro2 (colour + defence)</option>
             </select>
             <button id="cards-new-game" class="btn btn-outline-primary" type="button">Play solo</button>
             <button id="cards-start-public" class="btn btn-primary" type="button">Create public game</button>
@@ -79,7 +80,7 @@
     <div class="cards-rules card p-3 mt-4">
         <h2 class="h5">How to play</h2>
         <ul class="mb-0">
-            <li>Solo opponents: Tosser plays randomly; Pro works toward either winning set and tries to block yours, without seeing your hidden cards.</li>
+            <li>Solo opponents: Tosser plays randomly; Pro works toward either winning set; Pro2 favours colours only after winning a matching element/colour pair, and blocks imminent wins at any time. Neither strategic bot sees your hidden cards.</li>
             <li>Each player starts with five cards. On your turn, choose one card to play.</li>
             <li>Fire beats ice, ice beats water, and water beats fire. Matching elements compare values; equal values draw.</li>
             <li>The round winner keeps their own card. Draws discard both played cards. Players draw back up while cards are available.</li>
@@ -88,12 +89,13 @@
             <li>The first player is chosen randomly. The leader plays a hidden card, then the other player chooses a response. The round winner leads next; after a draw, the same player leads again.</li>
         </ul>
     </div>
+    <p id="cards-message" class="text-muted mt-3 mb-0">Concieved April 13, 2020. Finally unleashed in 2026.</p>
     <section class="cards-pile card p-3 mt-4" aria-labelledby="cards-statistics-title">
         <h2 id="cards-statistics-title" class="h5">Completed games</h2>
         <dl class="d-flex gap-4 flex-wrap mb-0">
             {% for stat in statistics %}
             <div>
-                <dt>{% if stat.category == "pvp" %}PvP{% elif stat.category == "private" %}PvP (private){% elif stat.category == "tosser" %}Solo Tosser{% else %}Solo Pro{% endif %}</dt>
+                <dt>{% if stat.category == "pvp" %}PvP{% elif stat.category == "private" %}PvP (private){% elif stat.category == "tosser" %}Solo Tosser{% elif stat.category == "pro" %}Solo Pro{% else %}Solo Pro2{% endif %}</dt>
                 <dd id="cards-stat-{{ stat.category }}" class="mb-0">{{ stat.completed }}</dd>
             </div>
             {% endfor %}
