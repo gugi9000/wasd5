@@ -25,8 +25,10 @@ pile contains a matching element/colour pair, not while considering a
 hypothetical pair. Before that it uses Pro's collection goals. It penalizes an
 opponent's game-winning capture more heavily than speculative progress.
 Both use only their own hand and public collections/discards, without inspecting
-hidden hands, pending cards, or deck order. Public games appear in the open
-games list; private games can be joined using their shareable game ID. Online
+hidden hands, pending cards, or deck order. **Create game** offers public and
+private games in a dropdown. **Join game** reveals the game-ID input and open
+public games list, with a count pill when public games are available; private
+games can be joined using their shareable game ID. Online
 games synchronize through server-side state and expire after 24 hours. The
 draw-pile count is shown in-game; when it cannot supply both players, discarded
 cards are shuffled back in while won cards stay out of play. It follows the

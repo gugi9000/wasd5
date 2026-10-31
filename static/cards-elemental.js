@@ -11,8 +11,11 @@
     const error = document.getElementById("cards-error");
     const newGameButton = document.getElementById("cards-new-game");
     const opponentSelect = document.getElementById("cards-opponent");
+    const createGameButton = document.getElementById("cards-create-game");
     const publicGameButton = document.getElementById("cards-start-public");
     const privateGameButton = document.getElementById("cards-start-private");
+    const toggleJoinButton = document.getElementById("cards-toggle-join");
+    const openGamesCount = document.getElementById("cards-open-games-count");
     const joinButton = document.getElementById("cards-join-button");
     const joinId = document.getElementById("cards-join-id");
     const openGames = document.getElementById("cards-open-games");
@@ -24,6 +27,7 @@
     let game = null;
     let busy = false;
     let roundAudio = null;
+    let lobbyExpanded = false;
 
     function roundEffect(round) {
         if (!round.winner) {
@@ -51,6 +55,7 @@
     function updateGame(next, silent = false) {
         const previousRound = game?.last_round?.round || 0;
         const newRound = next?.last_round;
+        if (next?.status === "playing" && game?.status !== "playing") lobbyExpanded = false;
         game = next;
         if (silent) {
             if (roundAudio) roundAudio.pause();
@@ -173,7 +178,7 @@
 
     function setControlsDisabled(disabled) {
         opponentSelect.disabled = disabled;
-        for (const button of [newGameButton, publicGameButton, privateGameButton, joinButton]) {
+        for (const button of [newGameButton, createGameButton, publicGameButton, privateGameButton, toggleJoinButton, joinButton]) {
             button.disabled = disabled;
         }
         openGames.querySelectorAll("button").forEach((button) => {
@@ -181,8 +186,13 @@
         });
     }
 
+    function renderLobby() {
+        lobby.hidden = !lobbyExpanded;
+        toggleJoinButton.setAttribute("aria-expanded", String(lobbyExpanded));
+    }
+
     function render() {
-        lobby.hidden = game?.status === "playing";
+        renderLobby();
         gameIdSection.hidden = game?.mode !== "online" || game?.status !== "waiting" || !game?.game_id;
         if (!game) {
             hand.replaceChildren();
@@ -317,6 +327,7 @@
                 {}
             );
             updateGame(next, true);
+            lobbyExpanded = false;
             render();
         } catch (reason) {
             error.textContent = reason.message;
@@ -331,6 +342,9 @@
         try {
             const response = await request("/games/cards-elemental/api/online/open");
             const games = response.games.filter((entry) => entry.id !== game?.game_id);
+            openGamesCount.textContent = String(games.length);
+            openGamesCount.hidden = games.length === 0;
+            openGamesCount.setAttribute("aria-label", `${games.length} public games available`);
             openGames.replaceChildren(...games.map((entry) => {
                 const item = document.createElement("li");
                 item.className = "list-group-item d-flex align-items-center justify-content-between gap-2";
@@ -368,6 +382,14 @@
     newGameButton.addEventListener("click", () => void createGame(null));
     publicGameButton.addEventListener("click", () => void createGame("public"));
     privateGameButton.addEventListener("click", () => void createGame("private"));
+    toggleJoinButton.addEventListener("click", () => {
+        lobbyExpanded = !lobbyExpanded;
+        renderLobby();
+        if (lobbyExpanded) {
+            joinId.focus();
+            void refreshOpenGames();
+        }
+    });
     joinButton.addEventListener("click", () => void joinGame(joinId.value));
     joinId.addEventListener("keydown", (event) => {
         if (event.key === "Enter") void joinGame(joinId.value);

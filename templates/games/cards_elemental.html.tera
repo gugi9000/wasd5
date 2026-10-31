@@ -18,12 +18,20 @@
                 <option value="pro2">Pro2 (colour + defence)</option>
             </select>
             <button id="cards-new-game" class="btn btn-outline-primary" type="button">Play solo</button>
-            <button id="cards-start-public" class="btn btn-primary" type="button">Create public game</button>
-            <button id="cards-start-private" class="btn btn-outline-primary" type="button">Create private game</button>
+            <div class="dropdown">
+                <button id="cards-create-game" class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Create game</button>
+                <ul class="dropdown-menu" aria-labelledby="cards-create-game">
+                    <li><button id="cards-start-public" class="dropdown-item" type="button">Public game</button></li>
+                    <li><button id="cards-start-private" class="dropdown-item" type="button">Private game</button></li>
+                </ul>
+            </div>
+            <button id="cards-toggle-join" class="btn btn-outline-primary" type="button" aria-expanded="false" aria-controls="cards-online-lobby">
+                Join game <span id="cards-open-games-count" class="badge rounded-pill text-bg-primary" hidden></span>
+            </button>
         </div>
     </header>
 
-    <section id="cards-online-lobby" class="cards-online-lobby card p-3 mb-4" aria-labelledby="cards-online-title">
+    <section id="cards-online-lobby" class="cards-online-lobby card p-3 mb-4" aria-labelledby="cards-online-title" hidden>
         <h2 id="cards-online-title" class="h5">Join a game</h2>
         <div class="d-flex gap-2 flex-wrap align-items-end mb-3">
             <label class="flex-grow-1" for="cards-join-id">
@@ -43,13 +51,13 @@
         <button id="cards-copy-game-id" class="btn btn-sm btn-outline-primary" type="button">Copy ID</button>
     </section>
 
-    <p id="cards-status" class="alert alert-secondary" role="status" aria-live="polite">
-        Start a game to draw your hand.
-    </p>
     <section id="cards-round-result" class="cards-round-result mb-4" aria-live="polite" hidden></section>
 
     <div class="cards-game-layout">
         <section aria-labelledby="your-hand-title">
+            <p id="cards-status" class="alert alert-secondary" role="status" aria-live="polite">
+                Start a game to draw your hand.
+            </p>
             <h2 id="your-hand-title" class="h4">Your hand</h2>
             <p id="cards-turn-hint" class="text-muted">Choose a card to play.</p>
             <div id="cards-hand" class="cards-hand"></div>

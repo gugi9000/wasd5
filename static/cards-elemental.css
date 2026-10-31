@@ -18,6 +18,7 @@
 }
 
 #cards-online-lobby[hidden],
+#cards-open-games-count[hidden],
 #cards-game-id-section[hidden] {
     display: none !important;
 }
