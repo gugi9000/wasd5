@@ -154,7 +154,7 @@
                 player_name: playerName,
             });
             scoreSent = true;
-            guestForm.hidden = true;
+            if (guestForm) guestForm.hidden = true;
             scoreMessage.textContent = signedIn
                 ? `Score saved for trusted account ${username}.`
                 : "Score saved as an unverified guest name.";
@@ -168,18 +168,18 @@
         clearInterval(timer);
         if (game.status === "lost") {
             setStatus("Mine hit — game over. Start a new game to try again.");
-            guestForm.hidden = true;
+            if (guestForm) guestForm.hidden = true;
         } else if (game.status === "won") {
             timeLabel.textContent = elapsedText(game.elapsed_ms);
             if (game.mode === "custom") {
                 setStatus("Board cleared! Custom games are not ranked.");
-                guestForm.hidden = true;
+                if (guestForm) guestForm.hidden = true;
             } else if (signedIn) {
                 setStatus(`Board cleared! Saving score for trusted account ${username}…`);
                 void sendScore(null);
             } else {
                 setStatus("Board cleared! Enter a name to submit your score as a guest.");
-                guestForm.hidden = false;
+                if (guestForm) guestForm.hidden = false;
                 document.getElementById("guest-name").focus();
             }
         }
@@ -238,7 +238,7 @@
         game = null;
         drawBoard();
         scoreSent = false;
-        guestForm.hidden = true;
+        if (guestForm) guestForm.hidden = true;
         scoreMessage.textContent = "";
         timeLabel.textContent = "0.0 s";
         setStatus("Starting a new board…");
@@ -291,8 +291,10 @@
         flagModeButton.textContent = `Tap to flag: ${flagMode ? "on" : "off"}`;
     });
 
-    guestForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        void sendScore(document.getElementById("guest-name").value);
-    });
+    if (guestForm) {
+        guestForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            void sendScore(document.getElementById("guest-name").value);
+        });
+    }
 })();

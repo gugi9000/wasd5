@@ -74,7 +74,7 @@
         startButton.disabled = false;
         startButton.textContent = "Play again";
         statusElement.textContent = `Game over — ${game.score} points and ${game.lines} lines.`;
-        scoreForm.hidden = signedIn;
+        if (scoreForm) scoreForm.hidden = signedIn;
         if (signedIn) void submitScore(null);
         else document.getElementById("tetris-player-name").focus();
     }
@@ -90,14 +90,14 @@
                 level: game.level,
             });
             scoreSubmitted = true;
-            scoreForm.hidden = true;
+            if (scoreForm) scoreForm.hidden = true;
             scoreMessage.textContent = signedIn
                 ? `Score saved for trusted account ${username}.`
                 : "Score saved as an unverified guest name.";
             await refreshLeaderboard();
         } catch (error) {
             scoreMessage.textContent = error.message;
-            scoreForm.hidden = !signedIn;
+            if (scoreForm) scoreForm.hidden = !signedIn;
         } finally {
             busy = false;
         }
@@ -174,7 +174,7 @@
         game = null;
         runId = null;
         scoreSubmitted = false;
-        scoreForm.hidden = true;
+        if (scoreForm) scoreForm.hidden = true;
         scoreMessage.textContent = "";
         statusElement.textContent = "Starting a new game…";
         try {
@@ -221,8 +221,10 @@
         button.addEventListener("click", () => applyAction(button.dataset.action));
     });
 
-    scoreForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        void submitScore(document.getElementById("tetris-player-name").value);
-    });
+    if (scoreForm) {
+        scoreForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            void submitScore(document.getElementById("tetris-player-name").value);
+        });
+    }
 })();

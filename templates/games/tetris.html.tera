@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/static/tetris.css" />
 <section id="tetris" data-csrf="{{ csrf }}" data-signed-in="{{ signed_in }}" data-username="{{ username }}">
     <h1>Tetris</h1>
-    <p>Fit falling pieces together to clear rows. The game follows the website’s current light or dark theme.</p>
+    <p>Fit falling pieces together to clear rows. You know.. tetris.</p>
 
     <div class="tetris-layout">
         <div class="tetris-play">
@@ -47,11 +47,13 @@
         </aside>
     </div>
 
+    {% if not signed_in %}
     <form id="tetris-score-form" class="mt-4 d-flex align-items-end gap-2 flex-wrap" hidden>
         <label class="form-label mb-0" for="tetris-player-name">Name for the leaderboard (up to 24 characters)</label>
         <input id="tetris-player-name" class="form-control tetris-name" maxlength="24" autocomplete="nickname" required />
         <button class="btn btn-success" type="submit">Save score</button>
     </form>
+    {% endif %}
     <p id="tetris-score-message" class="mt-2 mb-0" aria-live="polite"></p>
 
     <section class="mt-5" aria-labelledby="tetris-leaderboard-title">
