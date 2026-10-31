@@ -174,6 +174,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    cards_elemental_results (game_id) {
+        game_id -> Text,
+        category -> Text,
+        summary -> Text,
+        completed_at -> BigInt,
+    }
+}
+
+diesel::table! {
     cards_elemental_stats (category) {
         category -> Text,
         completed -> BigInt,

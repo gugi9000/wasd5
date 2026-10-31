@@ -92,6 +92,7 @@
     <p id="cards-message" class="text-muted mt-3 mb-0">Concieved April 13, 2020. Finally unleashed in 2026.</p>
     <section class="cards-pile card p-3 mt-4" aria-labelledby="cards-statistics-title">
         <h2 id="cards-statistics-title" class="h5">Completed games</h2>
+        <p><a href="/games/cards-elemental/stats">Detailed Humans vs Bots statistics</a></p>
         <dl class="d-flex gap-4 flex-wrap mb-0">
             {% for stat in statistics %}
             <div>

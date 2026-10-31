@@ -6,8 +6,8 @@ use rocket_dyn_templates::{Template, context};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use wasd5::cards_elemental_core::{
-    Card, Opponent, Side, bot_card_index, full_deck, has_won, next_random, refill_hands, shuffle,
-    winner_of,
+    Card, Opponent, Side, WinCondition, bot_card_index, full_deck, has_won, next_random,
+    refill_hands, shuffle, win_condition, winner_of,
 };
 #[cfg(test)]
 use wasd5::cards_elemental_core::{Colour, Element, pro_card_index};
@@ -16,7 +16,7 @@ use crate::comics::Private;
 use crate::db::DbPool;
 use crate::schema::{
     cards_elemental_games as games, cards_elemental_online_games as online_games,
-    cards_elemental_stats as stats,
+    cards_elemental_results as results, cards_elemental_stats as stats,
 };
 
 type GameError = (Status, String);
@@ -36,7 +36,8 @@ pub fn routes() -> Vec<rocket::Route> {
         join_online_game,
         current_online_game,
         play_online_card,
-        game_stats
+        game_stats,
+        statistics_page
     ]
 }
 
@@ -483,6 +484,131 @@ fn load_stats(conn: &mut diesel::SqliteConnection) -> GameResult<Vec<GameStat>> 
         ))
         .load(conn)
         .map_err(internal)
+}
+
+#[derive(Deserialize)]
+struct CompletedSummary {
+    rounds: u64,
+    winner: Option<usize>,
+    winnings: [Vec<Card>; 2],
+}
+
+#[derive(Default, Serialize)]
+struct BotStatistics {
+    opponent: String,
+    games: i64,
+    recorded: u64,
+    unrecorded: u64,
+    wins: [u64; 2],
+    draws: u64,
+    rounds: u64,
+    average_rounds: String,
+    human_win_rate: String,
+    bot_win_rate: String,
+    shortest: Option<u64>,
+    longest: Option<u64>,
+    round_wins: [u64; 2],
+    round_draws: u64,
+    all_elements: [u64; 2],
+    matching: [u64; 2],
+    both: [u64; 2],
+}
+
+fn detailed_statistics(conn: &mut diesel::SqliteConnection) -> GameResult<Vec<BotStatistics>> {
+    let totals = load_stats(conn)?;
+    let mut rows = Vec::new();
+    for (category, name) in [("tosser", "Tosser"), ("pro", "Pro"), ("pro2", "Pro2")] {
+        let total = totals
+            .iter()
+            .find(|stat| stat.category == category)
+            .ok_or_else(|| internal(format!("Missing statistics category: {category}")))?;
+        let summaries = results::table
+            .filter(results::category.eq(category))
+            .select(results::summary)
+            .load::<String>(conn)
+            .map_err(internal)?;
+        let mut row = BotStatistics {
+            opponent: name.into(),
+            games: total.completed,
+            ..Default::default()
+        };
+        for json in summaries {
+            let summary: CompletedSummary = serde_json::from_str(&json).map_err(internal)?;
+            let round_wins = summary.winnings.each_ref().map(|cards| cards.len() as u64);
+            let drawn = summary
+                .rounds
+                .checked_sub(round_wins[0] + round_wins[1])
+                .ok_or_else(|| internal("Completed result has inconsistent round counts"))?;
+            row.recorded += 1;
+            row.rounds += summary.rounds;
+            row.shortest = Some(
+                row.shortest
+                    .map_or(summary.rounds, |old| old.min(summary.rounds)),
+            );
+            row.longest = Some(
+                row.longest
+                    .map_or(summary.rounds, |old| old.max(summary.rounds)),
+            );
+            row.round_draws += drawn;
+            for (seat, count) in round_wins.into_iter().enumerate() {
+                row.round_wins[seat] += count;
+            }
+            if let Some(seat) = summary.winner {
+                if seat > 1 {
+                    return Err(internal("Completed result has invalid winner"));
+                }
+                row.wins[seat] += 1;
+                match win_condition(&summary.winnings[seat])
+                    .ok_or_else(|| internal("Completed winner has no winning collection"))?
+                {
+                    WinCondition::AllElements => row.all_elements[seat] += 1,
+                    WinCondition::MatchingCards => row.matching[seat] += 1,
+                    WinCondition::Both => row.both[seat] += 1,
+                }
+            } else {
+                row.draws += 1;
+            }
+        }
+        row.unrecorded = u64::try_from(row.games)
+            .map_err(internal)?
+            .checked_sub(row.recorded)
+            .ok_or_else(|| internal("Result count exceeds completed total"))?;
+        row.average_rounds = if row.recorded == 0 {
+            "-".into()
+        } else {
+            format!("{:.2}", row.rounds as f64 / row.recorded as f64)
+        };
+        row.human_win_rate = if row.recorded == 0 {
+            "-".into()
+        } else {
+            format!("{:.2}%", row.wins[0] as f64 * 100.0 / row.recorded as f64)
+        };
+        row.bot_win_rate = if row.recorded == 0 {
+            "-".into()
+        } else {
+            format!("{:.2}%", row.wins[1] as f64 * 100.0 / row.recorded as f64)
+        };
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+#[get("/games/cards-elemental/stats")]
+fn statistics_page(
+    navigation: crate::PageNavigation,
+    pool: &State<DbPool>,
+) -> GameResult<Private<Template>> {
+    let mut conn = pool.get().map_err(internal)?;
+    let statistics = conn
+        .transaction::<_, diesel::result::Error, _>(|conn| Ok(detailed_statistics(conn)))
+        .map_err(internal)??;
+    Ok(Private(Template::render(
+        "games/cards_elemental_stats",
+        context! {
+            pages: navigation.0,
+            statistics,
+        },
+    )))
 }
 
 #[get("/games/cards-elemental/api/stats")]
@@ -995,6 +1121,240 @@ mod tests {
             .next()
             .unwrap()
             .to_owned()
+    }
+
+    #[test]
+    fn detailed_results_record_final_moves_once_and_survive_cleanup() {
+        let (client, _dir) = client();
+        let csrf = csrf_for(&client);
+        let pool = client.rocket().state::<DbPool>().unwrap();
+        let mut conn = pool.get().unwrap();
+        for opponent in [Opponent::Tosser, Opponent::Pro, Opponent::Pro2] {
+            let mut state = new_state(&Uuid::new_v4(), opponent);
+            state.your_winnings = vec![
+                card(Element::Fire, Colour::Red, 1),
+                card(Element::Ice, Colour::Blue, 1),
+            ];
+            state.your_hand = vec![card(Element::Water, Colour::Red, 10)];
+            state.pending_server_card = Some(card(Element::Fire, Colour::Blue, 2));
+            state.round = 4;
+            let created = client
+                .post("/games/cards-elemental/api/games")
+                .header(ContentType::JSON)
+                .body(serde_json::json!({"csrf":csrf, "opponent":opponent}).to_string())
+                .dispatch();
+            assert_eq!(created.status(), Status::Ok);
+            let id = client
+                .cookies()
+                .get_private(GAME_COOKIE)
+                .unwrap()
+                .value()
+                .to_owned();
+            let json = serde_json::to_string(&state).unwrap();
+            diesel::update(games::table.find(&id))
+                .set(games::state.eq(&json))
+                .execute(&mut conn)
+                .unwrap();
+            let play = || {
+                client
+                    .post("/games/cards-elemental/api/game/play")
+                    .header(ContentType::JSON)
+                    .body(serde_json::json!({"csrf":csrf, "card_index":0}).to_string())
+                    .dispatch()
+            };
+            assert_eq!(play().status(), Status::Ok);
+            assert_eq!(play().status(), Status::Conflict);
+            let summary: String = results::table
+                .find(&id)
+                .select(results::summary)
+                .first(&mut conn)
+                .unwrap();
+            assert!(!summary.contains("hand"));
+            assert!(!summary.contains("token"));
+        }
+        let statistics = detailed_statistics(&mut conn).unwrap();
+        for stat in statistics {
+            assert_eq!(stat.recorded, 1);
+            assert_eq!(stat.wins, [1, 0]);
+            assert_eq!(stat.all_elements, [1, 0]);
+            assert_eq!(stat.rounds, 4);
+            assert_eq!(stat.round_draws, 1);
+            assert_eq!(stat.average_rounds, "4.00");
+        }
+        diesel::delete(games::table).execute(&mut conn).unwrap();
+        assert_eq!(
+            results::table.count().get_result::<i64>(&mut conn).unwrap(),
+            3
+        );
+        let html = client.get("/games/cards-elemental/stats").dispatch();
+        assert_eq!(html.status(), Status::Ok);
+        let html = html.into_string().unwrap();
+        for label in [
+            "Humans vs Bots",
+            "Human wins",
+            "Bot wins",
+            "Rounds played",
+            "Winning conditions",
+            "Pro2",
+        ] {
+            assert!(html.contains(label), "{label}");
+        }
+    }
+
+    #[test]
+    fn detailed_statistics_backfill_and_legacy_unknown_results() {
+        use diesel::connection::SimpleConnection;
+        let (client, _dir) = client();
+        let mut conn = client.rocket().state::<DbPool>().unwrap().get().unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000020_create_cards_elemental_results/down.sql"
+        ))
+        .unwrap();
+        let winning = vec![
+            card(Element::Fire, Colour::Red, 1),
+            card(Element::Fire, Colour::Red, 2),
+            card(Element::Fire, Colour::Red, 3),
+        ];
+        let mut state = new_state(&Uuid::new_v4(), Opponent::Pro2);
+        state.status = GameStatus::Lost;
+        state.server_winnings = winning;
+        state.round = 6;
+        let json = serde_json::to_string(&state).unwrap();
+        diesel::insert_into(games::table)
+            .values(NewGame {
+                id: "legacy",
+                state: &json,
+                created_at: 0,
+                updated_at: 0,
+            })
+            .execute(&mut conn)
+            .unwrap();
+        diesel::update(stats::table.filter(stats::category.eq("pro2")))
+            .set(stats::completed.eq(3))
+            .execute(&mut conn)
+            .unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000020_create_cards_elemental_results/up.sql"
+        ))
+        .unwrap();
+        let rows = detailed_statistics(&mut conn).unwrap();
+        assert_eq!(rows[2].wins, [0, 1]);
+        assert_eq!(rows[2].matching, [0, 1]);
+        assert_eq!(rows[2].unrecorded, 2);
+        assert_eq!(rows[2].round_draws, 2);
+        assert_eq!(rows[0].average_rounds, "-");
+    }
+
+    #[test]
+    fn statistics_include_draws_and_count_both_conditions_exclusively() {
+        let (client, _dir) = client();
+        let mut conn = client.rocket().state::<DbPool>().unwrap().get().unwrap();
+        let winnings = vec![
+            card(Element::Fire, Colour::Red, 1),
+            card(Element::Fire, Colour::Red, 2),
+            card(Element::Fire, Colour::Red, 3),
+            card(Element::Ice, Colour::Blue, 1),
+            card(Element::Water, Colour::Blue, 1),
+        ];
+        let both =
+            serde_json::json!({"rounds":7, "winner":0, "winnings":[winnings, []]}).to_string();
+        let draw = serde_json::json!({"rounds":2, "winner":null, "winnings":[[], []]}).to_string();
+        for (id, summary) in [("both", both), ("draw", draw)] {
+            diesel::insert_into(results::table)
+                .values((
+                    results::game_id.eq(id),
+                    results::category.eq("tosser"),
+                    results::summary.eq(summary),
+                    results::completed_at.eq(0_i64),
+                ))
+                .execute(&mut conn)
+                .unwrap();
+        }
+        diesel::update(stats::table.filter(stats::category.eq("tosser")))
+            .set(stats::completed.eq(2))
+            .execute(&mut conn)
+            .unwrap();
+        let rows = detailed_statistics(&mut conn).unwrap();
+        let row = &rows[0];
+        assert_eq!(row.draws, 1);
+        assert_eq!(row.wins, [1, 0]);
+        assert_eq!(row.both, [1, 0]);
+        assert_eq!(row.matching, [0, 0]);
+        assert_eq!(row.all_elements, [0, 0]);
+        assert_eq!(row.rounds, 9);
+        assert_eq!(row.round_draws, 4);
+        assert_eq!(row.shortest, Some(2));
+        assert_eq!(row.longest, Some(7));
+        assert_eq!(row.average_rounds, "4.50");
+        assert_eq!(row.human_win_rate, "50.00%");
+    }
+
+    #[test]
+    fn result_trigger_rolls_back_with_final_state_and_records_pvp() {
+        let (client, _dir) = client();
+        let mut conn = client.rocket().state::<DbPool>().unwrap().get().unwrap();
+        let uuid = Uuid::new_v4();
+        let mut state = new_online_state(&uuid, "not-persisted-in-summary".into());
+        state.status = GameStatus::Playing;
+        let playing = serde_json::to_string(&state).unwrap();
+        for visibility in ["public", "private"] {
+            diesel::insert_into(online_games::table)
+                .values(NewOnlineGame {
+                    id: visibility,
+                    visibility,
+                    status: "playing",
+                    state: &playing,
+                    created_at: 0,
+                    updated_at: 0,
+                })
+                .execute(&mut conn)
+                .unwrap();
+            state.status = GameStatus::Draw;
+            state.round = 2;
+            let ended = serde_json::to_string(&state).unwrap();
+            let rollback = conn.transaction::<(), diesel::result::Error, _>(|conn| {
+                diesel::update(online_games::table.find(visibility))
+                    .set((
+                        online_games::status.eq("draw"),
+                        online_games::state.eq(&ended),
+                    ))
+                    .execute(conn)?;
+                assert_eq!(
+                    results::table
+                        .filter(results::game_id.eq(visibility))
+                        .count()
+                        .get_result::<i64>(conn)?,
+                    1
+                );
+                Err(diesel::result::Error::RollbackTransaction)
+            });
+            assert!(rollback.is_err());
+            assert_eq!(
+                results::table
+                    .filter(results::game_id.eq(visibility))
+                    .count()
+                    .get_result::<i64>(&mut conn)
+                    .unwrap(),
+                0
+            );
+            diesel::update(online_games::table.find(visibility))
+                .set((
+                    online_games::status.eq("draw"),
+                    online_games::state.eq(&ended),
+                ))
+                .execute(&mut conn)
+                .unwrap();
+        }
+        assert_eq!(
+            results::table.count().get_result::<i64>(&mut conn).unwrap(),
+            2
+        );
+        assert!(
+            detailed_statistics(&mut conn)
+                .unwrap()
+                .iter()
+                .all(|row| row.recorded == 0)
+        );
     }
 
     #[test]

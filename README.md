@@ -38,6 +38,14 @@ Only a winner or draw counts; abandoned games do not. Totals survive session
 expiry. The migration includes completed sessions still present in the database;
 previously expired sessions cannot be recovered.
 
+`/games/cards-elemental/stats` shows Humans vs Bots results for Tosser, Pro,
+and Pro2: game wins/draws, rounds played (total/average/shortest/longest),
+round results, and winning conditions. Completed solo and PvP games retain
+permanent result summaries atomically with the final move, without hands or
+player identifiers. PvP is not displayed on this page. Existing retained
+completed sessions are backfilled; older counts without recoverable results
+are explicitly marked unrecorded. Simulator games never enter these totals.
+
 ### Cards Elemental bot simulator
 
 Run `cargo run --release --bin cards_elemental_sim` for 10,000 Tosser vs Pro

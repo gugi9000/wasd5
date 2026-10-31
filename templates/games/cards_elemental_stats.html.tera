@@ -1,0 +1,45 @@
+{% extends "base" %}
+{% block title %}Cards Elemental statistics{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<h1>Cards Elemental statistics</h1>
+<p><a href="/games/cards-elemental">Play Cards Elemental</a></p>
+<h2 class="h4">Humans vs Bots</h2>
+<p>Completed games only. Historical games without retained results appear as unrecorded; they are not assigned a winner or included in round and winning-condition statistics.</p>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead><tr><th>Opponent</th><th>Games</th><th>Human wins</th><th>Bot wins</th><th>Draws</th><th>Human win rate</th><th>Bot win rate</th><th>Unrecorded results</th></tr></thead>
+        <tbody>
+        {% for stat in statistics %}
+        <tr><th scope="row">{{ stat.opponent }}</th><td>{{ stat.games }}</td><td>{{ stat.wins[0] }}</td><td>{{ stat.wins[1] }}</td><td>{{ stat.draws }}</td><td>{{ stat.human_win_rate }}</td><td>{{ stat.bot_win_rate }}</td><td>{{ stat.unrecorded }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p>Win rates use recorded completed games, including draws. A human win is a bot loss and vice versa.</p>
+<h2 class="h4">Rounds played</h2>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead><tr><th>Opponent</th><th>Recorded games</th><th>Total rounds</th><th>Average per game</th><th>Shortest</th><th>Longest</th><th>Human round wins</th><th>Bot round wins</th><th>Drawn rounds</th></tr></thead>
+        <tbody>
+        {% for stat in statistics %}
+        <tr><th scope="row">{{ stat.opponent }}</th><td>{{ stat.recorded }}</td><td>{{ stat.rounds }}</td><td>{{ stat.average_rounds }}</td><td>{% if stat.shortest %}{{ stat.shortest }}{% else %}–{% endif %}</td><td>{% if stat.longest %}{{ stat.longest }}{% else %}–{% endif %}</td><td>{{ stat.round_wins[0] }}</td><td>{{ stat.round_wins[1] }}</td><td>{{ stat.round_draws }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+<h2 class="h4">Winning conditions</h2>
+<p>Each victory is counted once. A collection satisfying both rules appears only in “Both”.</p>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead><tr><th>Opponent</th><th>Winner</th><th>All three elements</th><th>Three of the same element + colour</th><th>Both</th></tr></thead>
+        <tbody>
+        {% for stat in statistics %}
+        <tr><th scope="row">{{ stat.opponent }}</th><td>Human</td><td>{{ stat.all_elements[0] }}</td><td>{{ stat.matching[0] }}</td><td>{{ stat.both[0] }}</td></tr>
+        <tr><th scope="row">{{ stat.opponent }}</th><td>Bot</td><td>{{ stat.all_elements[1] }}</td><td>{{ stat.matching[1] }}</td><td>{{ stat.both[1] }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock content %}

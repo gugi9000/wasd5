@@ -1,0 +1,3 @@
+DROP TRIGGER cards_elemental_online_result;
+DROP TRIGGER cards_elemental_solo_result;
+DROP TABLE cards_elemental_results;
