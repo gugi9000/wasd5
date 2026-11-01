@@ -3,6 +3,20 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { spawnSync } = require("node:child_process");
+
+test("account menu script is referenced by the base template and not ignored by Git", () => {
+    const root = path.join(__dirname, "..");
+    const template = fs.readFileSync(path.join(root, "templates", "base.html.tera"), "utf8");
+    assert.ok(template.includes('<script src="/static/account-menu.js" defer></script>'));
+    assert.ok(fs.existsSync(path.join(root, "static", "account-menu.js")));
+    const ignored = spawnSync("git", ["check-ignore", "--no-index", "--quiet", "static/account-menu.js"], {
+        cwd: root,
+        encoding: "utf8",
+    });
+    assert.ifError(ignored.error);
+    assert.equal(ignored.status, 1, `Account menu script must be deployable through Git: ${ignored.stderr}`);
+});
 
 async function menu(account, ok = true) {
     const elements = {

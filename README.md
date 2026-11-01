@@ -40,6 +40,8 @@ The admin dashboard at `/admin` links to **Pages admin** at `/admin/pages`,
 where administrators can list, create and edit pages. Navigation shows **Login**
 for guests and an **Admin** dropdown with the dashboard's links and signed-in
 Display Name for authenticated users. Individual admin routes retain their access checks.
+Deploy `static/account-menu.js` with the templates: it loads the current account
+and reveals the signed-in navigation.
 
 Users have a **Display Name**, editable in browser user administration and in
 local or remote `manage`. It is optional: blank names fall back to the login

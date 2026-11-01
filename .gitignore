@@ -3,6 +3,7 @@ wasd5.db
 /uploads/
 pages/
 /static/*
+!/static/account-menu.js
 !/static/box-breathing.css
 !/static/box-breathing.js
 !/static/fitness.css
