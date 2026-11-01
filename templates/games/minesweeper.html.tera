@@ -18,10 +18,12 @@
                 <option value="custom">Custom</option>
             </select>
         </label>
-        <div id="custom-options" class="d-flex gap-2" hidden>
-            <label class="form-label mb-0">Rows <input id="custom-rows" class="form-control" type="number" min="5" max="24" value="10" /></label>
-            <label class="form-label mb-0">Columns <input id="custom-columns" class="form-control" type="number" min="5" max="30" value="10" /></label>
-            <label class="form-label mb-0">Mines <input id="custom-mines" class="form-control" type="number" min="1" max="719" value="15" /></label>
+        <div id="custom-options" hidden>
+            <div class="d-flex gap-2">
+                <label class="form-label mb-0">Rows <input id="custom-rows" class="form-control" type="number" min="5" max="24" value="10" /></label>
+                <label class="form-label mb-0">Columns <input id="custom-columns" class="form-control" type="number" min="5" max="30" value="10" /></label>
+                <label class="form-label mb-0">Mines <input id="custom-mines" class="form-control" type="number" min="1" max="719" value="15" /></label>
+            </div>
         </div>
         <button id="new-game" class="btn btn-primary" type="button">New game</button>
         <button id="flag-mode" class="btn btn-outline-secondary" type="button" aria-pressed="false">Tap to flag: off</button>
@@ -105,5 +107,6 @@
         </div>
     </section>
 </section>
+<script src="/static/minesweeper-solver.js" defer></script>
 <script src="/static/minesweeper.js" defer></script>
 {% endblock content %}

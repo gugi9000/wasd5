@@ -10,6 +10,11 @@ measures leaderboard times; the three fixed modes have separate leaderboards.
 Signed-in users appear under their account name with an **Account** badge.
 Guests choose a name after winning and are marked as unverified. Server-side
 validation makes scores harder to forge, but does not prevent automated play.
+After 10 idle seconds with no active game, an unranked demo starts in a randomly
+chosen Easy, Intermediate, or Advanced mode:
+it flags deduced mines, reveals safe cells, and guesses randomly when stuck.
+Page interaction stops auto-solving; **New game** starts a fresh board.
+Configure the delay with `IDLE_DELAY_MS` in `static/minesweeper.js`.
 
 Tetris is available at `/games/tetris`. Use H/J/K/L or the arrow keys to move
 and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space

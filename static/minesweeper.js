@@ -1,6 +1,9 @@
 (function () {
     "use strict";
 
+    const IDLE_DELAY_MS = 10_000;
+    const AUTO_MOVE_DELAY_MS = 500;
+
     const root = document.getElementById("minesweeper");
     if (!root) return;
 
@@ -22,6 +25,54 @@
     let busy = false;
     let flagMode = false;
     let scoreSent = false;
+    let idleTimer = null;
+    let autoTimer = null;
+    let autoSolving = false;
+    let demoGame = false;
+    let pendingNewGame = false;
+
+    function scheduleIdleGame() {
+        clearTimeout(idleTimer);
+        if (document.hidden || busy || game?.status === "playing") return;
+        idleTimer = setTimeout(() => {
+            if (document.hidden || busy || game?.status === "playing") return;
+            autoSolving = true;
+            void startGame(true);
+        }, IDLE_DELAY_MS);
+    }
+
+    function stopAutoSolving() {
+        clearTimeout(autoTimer);
+        if (autoSolving && game?.status === "playing") {
+            setStatus("Auto-solving stopped. Continue this board or start a new game.");
+        }
+        autoSolving = false;
+    }
+
+    function userActivity() {
+        stopAutoSolving();
+        scheduleIdleGame();
+    }
+
+    function scheduleAutoMove() {
+        clearTimeout(autoTimer);
+        if (!autoSolving || document.hidden || game?.status !== "playing") return;
+        autoTimer = setTimeout(async () => {
+            if (!autoSolving || document.hidden || busy || game?.status !== "playing") return;
+            const next = window.MinesweeperSolver.nextMove(game);
+            if (!next) {
+                stopAutoSolving();
+                setStatus("Auto-solver has no available moves.");
+                return;
+            }
+            setStatus(next.guessed
+                ? `Auto-solving ${game.mode}: no deduction available, guessing a random tile.`
+                : next.action === "flag"
+                  ? `Auto-solving ${game.mode}: flagging a calculated mine.`
+                  : `Auto-solving ${game.mode}: revealing a safe tile.`);
+            if (await move(next.action, next.index)) scheduleAutoMove();
+        }, AUTO_MOVE_DELAY_MS);
+    }
 
     modeSelect.addEventListener("change", () => {
         customOptions.hidden = modeSelect.value !== "custom";
@@ -148,7 +199,7 @@
     }
 
     async function sendScore(playerName) {
-        if (scoreSent || !game) return;
+        if (scoreSent || !game || demoGame) return;
         try {
             await request(`/games/minesweeper/api/games/${game.id}/score`, {
                 player_name: playerName,
@@ -166,6 +217,16 @@
 
     function finishGame() {
         clearInterval(timer);
+        clearTimeout(autoTimer);
+        autoSolving = false;
+        if (demoGame) {
+            setStatus(game.status === "won"
+                ? "Auto-solver cleared the board. Demo games are not ranked."
+                : "Auto-solver hit a mine. Demo games are not ranked.");
+            if (guestForm) guestForm.hidden = true;
+            timeLabel.textContent = elapsedText(game.elapsed_ms);
+            return;
+        }
         if (game.status === "lost") {
             setStatus("Mine hit — game over. Start a new game to try again.");
             if (guestForm) guestForm.hidden = true;
@@ -186,7 +247,7 @@
     }
 
     async function move(action, index) {
-        if (!game || busy || game.status !== "playing") return;
+        if (!game || busy || game.status !== "playing") return false;
         if (startedAt === null) {
             startedAt = Date.now();
             timer = setInterval(() => {
@@ -218,20 +279,35 @@
             if (game.status === "won" || game.status === "lost") {
                 finishGame();
             }
+            return true;
         } catch (error) {
+            stopAutoSolving();
             setStatus(error.message);
+            return false;
         } finally {
             busy = false;
             drawBoard();
             if (checkedCells.length) flashCells(checkedCells);
+            if (pendingNewGame) {
+                pendingNewGame = false;
+                void startGame();
+            } else {
+                scheduleIdleGame();
+            }
         }
     }
 
     const newGameButton = document.getElementById("new-game");
-    newGameButton.addEventListener("click", async () => {
-        if (busy) return;
+    async function startGame(automatic = false) {
+        if (busy) {
+            if (!automatic) pendingNewGame = true;
+            return;
+        }
+        clearTimeout(idleTimer);
+        clearTimeout(autoTimer);
+        demoGame = automatic;
+        if (!automatic) stopAutoSolving();
         busy = true;
-        newGameButton.disabled = true;
         clearInterval(timer);
         timer = null;
         startedAt = null;
@@ -242,6 +318,11 @@
         scoreMessage.textContent = "";
         timeLabel.textContent = "0.0 s";
         setStatus("Starting a new board…");
+        if (automatic) {
+            const modes = ["easy", "intermediate", "advanced"];
+            modeSelect.value = modes[Math.floor(Math.random() * modes.length)];
+            customOptions.hidden = true;
+        }
         const body = { mode: modeSelect.value };
         if (body.mode === "custom") {
             body.rows = Number(document.getElementById("custom-rows").value);
@@ -250,16 +331,29 @@
         }
         try {
             game = await request("/games/minesweeper/api/games", body);
-            setStatus("Good luck! Left-click to reveal, right-click to flag, middle-click to chord.");
+            setStatus(automatic && autoSolving
+                ? `Auto-solving ${game.mode}. Interact with the page to stop.`
+                : "Good luck! Left-click to reveal, right-click to flag, middle-click to chord.");
             drawBoard();
         } catch (error) {
+            stopAutoSolving();
             setStatus(error.message);
             drawBoard();
         } finally {
             busy = false;
-            newGameButton.disabled = false;
             drawBoard();
+            if (pendingNewGame) {
+                pendingNewGame = false;
+                void startGame();
+            } else {
+                scheduleAutoMove();
+                scheduleIdleGame();
+            }
         }
+    }
+    newGameButton.addEventListener("click", () => {
+        stopAutoSolving();
+        void startGame();
     });
 
     boardHost.addEventListener("pointerdown", (event) => {
@@ -297,4 +391,12 @@
             void sendScore(document.getElementById("guest-name").value);
         });
     }
+    for (const event of ["pointerdown", "pointermove", "keydown", "click", "wheel", "input"]) {
+        document.addEventListener(event, userActivity, { capture: true, passive: true });
+    }
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) stopAutoSolving();
+        scheduleIdleGame();
+    });
+    scheduleIdleGame();
 })();
