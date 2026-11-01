@@ -14,6 +14,9 @@ pages/
 !/static/tetris-core.js
 !/static/tetris.css
 !/static/tetris.js
+!/static/musha-shugyo-core.js
+!/static/musha-shugyo.css
+!/static/musha-shugyo.js
 !/static/cards-elemental.css
 !/static/cards-elemental.js
 !/static/cards-elemental/

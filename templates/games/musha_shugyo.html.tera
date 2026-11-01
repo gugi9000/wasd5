@@ -1,0 +1,111 @@
+{% extends "base" %}
+{% block title %}Musha Shugyo{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<link rel="stylesheet" href="/static/musha-shugyo.css" />
+<section id="musha-shugyo" data-csrf="{{ csrf }}" data-signed-in="{{ signed_in }}">
+    <header class="musha-header">
+        <p class="musha-eyebrow">En vandring i stilhed</p>
+        <h1>Musha Shugyo</h1>
+        <p>En personlig, vedvarende vandring i månedens fælles verden. Se dig omkring, lær væsenerne at kende, og find vejen gennem skoven fra rum til rum.</p>
+    </header>
+
+    {% if signed_in %}
+    <div id="musha-start" class="musha-panel mb-3">
+        <p id="musha-journey-status" class="mb-2" role="status" aria-live="polite">Indlæser din rejse …</p>
+        <button id="musha-start-button" class="btn btn-primary" type="button" hidden>Begynd din rejse</button>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <a href="/admin/login">Log ind</a> for at begynde en rejse, der gemmes på din konto. Har du ikke en konto, skriv til <a href="mailto:bs@wasd.dk">Bjarke</a> og få en oprettet. Så du kan deltage i Musha Shugyo.
+    </div>
+    {% endif %}
+
+    <div id="musha-game" hidden>
+    <div class="musha-layout">
+        <section class="musha-play" aria-label="Spilområde">
+            <div class="musha-toolbar">
+                <span>Tur <strong id="musha-turn">0</strong></span>
+                <span id="musha-room" class="musha-room">Rum 0,0</span>
+                <span id="musha-zone" class="musha-zone">Ingen i syne</span>
+            </div>
+            <div id="musha-board" class="musha-board" role="grid" aria-label="Skovsti"></div>
+            <p id="musha-status" class="musha-status" role="status" aria-live="polite">Du står ved skovens indgang. Find en åbning i ydervæggen for at gå videre.</p>
+            <p id="musha-position-note" class="musha-position-note" aria-live="polite"></p>
+            <div class="musha-controls" aria-label="Handlinger">
+                <button class="btn btn-outline-secondary" type="button" data-action="north" aria-label="Gå nord">↑</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="west" aria-label="Gå vest">←</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="south" aria-label="Gå syd">↓</button>
+                <button class="btn btn-outline-secondary" type="button" data-action="east" aria-label="Gå øst">→</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="observe">Observer</button>
+                <button class="btn btn-outline-danger musha-action" type="button" data-action="attack" disabled>Angrib</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="wait">Vent</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="collect">Saml ressource</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="activate_checkpoint">Aktivér hokora</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="train">Træn kampfærdighed</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="return_checkpoint">Vend tilbage til hokora</button>
+                <button class="btn btn-outline-secondary musha-action" type="button" data-action="yield">Træk dig tilbage</button>
+                <button class="btn btn-outline-warning musha-action" type="button" data-action="flee" disabled>Flygt efter ens slag</button>
+            </div>
+            <section class="musha-legend" aria-labelledby="musha-legend-title">
+                <h2 id="musha-legend-title" class="h6">Tegnforklaring</h2>
+                <ul class="musha-legend-list mb-0">
+                    <li><span class="musha-legend-key">人</span> Dig</li>
+                    <li><span class="musha-legend-key">獣</span> Væsen</li>
+                    <li><span class="musha-legend-key">門</span> Åbning til et nyt rum</li>
+                    <li><span class="musha-legend-key">祠</span> Hokora, hvor du kan forankre din tilstand</li>
+                    <li><span class="musha-legend-key">実</span> Bær, der kan samles</li>
+                    <li><span class="musha-legend-key">茸</span> Svamp, der kan samles</li>
+                    <li><span class="musha-legend-key">宝</span> Fund, der kan sikres ved en hokora</li>
+                </ul>
+            </section>
+            <section class="musha-panel musha-combat-panel">
+                <h2 class="h6">Færdigheder og liv</h2>
+                <p id="musha-combat-stats" class="mb-1">Dig: kamp 2, liv 10/10</p>
+                <p id="musha-combat-result" class="mb-0" role="status" aria-live="polite">Ingen kamp endnu.</p>
+            </section>
+        </section>
+
+        <aside class="musha-notes">
+            <section class="musha-panel">
+                <h2 class="h5">Dit blik</h2>
+                <p id="musha-player-knowledge" class="mb-0">Du har endnu ikke studeret væsenet.</p>
+            </section>
+            <section class="musha-panel">
+                <h2 class="h5">Væsenets sind</h2>
+                <p id="musha-creature-mood" class="mb-0">Skoven er stille.</p>
+            </section>
+            <section class="musha-panel">
+                <h2 class="h5">Rejsens spor</h2>
+                <ol id="musha-journal" class="musha-journal mb-0" aria-live="polite"></ol>
+            </section>
+            <section class="musha-panel">
+                <h2 class="h5">Beholdning</h2>
+                <p id="musha-inventory" class="mb-1">Sikret: 0 · Usikret: 0</p>
+                <p id="musha-checkpoint" class="mb-0">Ingen aktiv hokora.</p>
+            </section>
+            <section class="musha-panel musha-help">
+                <h2 class="h5">Handlinger</h2>
+                <ul class="mb-0">
+                    <li>Piletaster for at gå</li>
+                    <li><kbd>A</kbd> angreb · <kbd>O</kbd> observer</li>
+                    <li><kbd>S</kbd> eller <kbd>C</kbd> saml ressource</li>
+                    <li><kbd>H</kbd> aktivér hokora · <kbd>V</kbd> eller <kbd>W</kbd> vent</li>
+                    <li>Ved hokoraen kan du træne kampfærdighed med erfaring og skatte</li>
+                    <li>Ens terninger kan åbne mulighed for flugt</li>
+                    <li>Gå ind i buskads for at skjule dig</li>
+                    <li><strong>Observer</strong> for at studere væsenet</li>
+                    <li><strong>Saml ressource</strong> for at bære bær og svampe med dig</li>
+                    <li>Ved en hokora kan du sikre fund og forankre din tilstand</li>
+                    <li>Hver handling giver også væsenet en tur</li>
+                    <li>Et væsen går rundt i sit rum, mens du er væk</li>
+                </ul>
+            </section>
+        </aside>
+    </div>
+    </div>
+</section>
+<script src="/static/musha-shugyo-core.js" defer></script>
+<script src="/static/musha-shugyo.js" defer></script>
+{% endblock content %}

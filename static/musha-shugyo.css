@@ -1,0 +1,356 @@
+#musha-shugyo {
+    --musha-ink: #26352b;
+    --musha-moss: #526c50;
+    --musha-leaf: #788c63;
+    --musha-bark: #64503b;
+    --musha-paper: #f5f2e8;
+}
+
+.musha-header {
+    max-width: 46rem;
+    margin-bottom: 1.5rem;
+}
+
+.musha-header h1 {
+    margin-bottom: 0.4rem;
+    color: var(--musha-ink);
+}
+
+.musha-eyebrow {
+    margin-bottom: 0.3rem;
+    color: var(--musha-moss);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.musha-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.musha-play {
+    min-width: 0;
+}
+
+.musha-toolbar {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.musha-toolbar button {
+    margin-left: auto;
+}
+
+.musha-zone {
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: var(--card-border);
+    color: var(--bs-body-color);
+    font-size: 0.9rem;
+}
+
+.musha-room {
+    color: var(--musha-moss);
+    font-weight: 600;
+}
+
+.musha-board {
+    display: grid;
+    grid-template-columns: repeat(var(--musha-columns, 13), minmax(1.7rem, 3.25rem));
+    grid-template-rows: repeat(9, minmax(1.7rem, 3.25rem));
+    justify-content: center;
+    gap: 2px;
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    padding: 0.5rem;
+    overflow: auto;
+    border: 1px solid #87917a;
+    border-radius: 0.6rem;
+    background: #d6d7bd;
+    box-shadow: inset 0 0 0 5px rgb(255 255 255 / 28%);
+}
+
+.musha-cell {
+    display: grid;
+    min-width: 0;
+    place-items: center;
+    border-radius: 0.2rem;
+    background: #e5e3d1;
+    color: var(--musha-ink);
+    font-size: clamp(0.9rem, 3vw, 1.7rem);
+    line-height: 1;
+}
+
+.musha-cell.is-tree {
+    border: 1px solid #55664b;
+    background: #53694c;
+    box-shadow: inset 0 0 0 3px rgb(255 255 255 / 9%);
+}
+
+.musha-cell.is-bush {
+    background: #84926a;
+    box-shadow: inset 0 0 0 2px rgb(52 73 47 / 26%);
+}
+
+.musha-cell.is-door {
+    border: 1px solid #9c8053;
+    background: #e0cfaa;
+    color: #704d31;
+    font-size: clamp(0.75rem, 2.5vw, 1.2rem);
+}
+
+.musha-cell.is-hokora {
+    border: 1px solid #a48a56;
+    background: #e8dfbf;
+    color: #80602e;
+}
+
+.musha-cell.is-resource {
+    background: #dce5c8;
+    color: #4a653e;
+}
+
+.musha-cell.is-treasure {
+    background: #eedca9;
+    color: #78551b;
+}
+
+.musha-cell.is-player {
+    z-index: 1;
+    background: #f3ead1;
+    color: #183b35;
+    font-weight: 700;
+}
+
+.musha-cell.is-creature {
+    z-index: 1;
+    background: #ead9c7;
+    color: #694535;
+}
+
+.musha-status {
+    min-height: 3rem;
+    margin: 0.9rem 0;
+    color: var(--bs-body-color);
+}
+
+.musha-position-note {
+    min-height: 1.5rem;
+    margin: -0.5rem 0 0.75rem;
+    color: var(--musha-moss);
+    font-weight: 600;
+}
+
+.musha-door-key {
+    display: inline-block;
+    margin-right: 0.25rem;
+    color: #704d31;
+    font-weight: 700;
+}
+
+.musha-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 5rem));
+    max-width: 22rem;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-inline: auto;
+}
+
+.musha-controls button {
+    min-width: 0;
+    padding-inline: 0.35rem;
+    white-space: normal;
+}
+
+.musha-controls [data-action="north"] {
+    grid-column: 2;
+}
+
+.musha-controls [data-action="west"] {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.musha-controls [data-action="south"] {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.musha-controls [data-action="east"] {
+    grid-column: 3;
+    grid-row: 2;
+}
+
+.musha-controls [data-action="observe"] {
+    grid-column: 1 / 3;
+    grid-row: 3;
+}
+
+.musha-controls [data-action="wait"] {
+    grid-column: 3 / 5;
+    grid-row: 3;
+}
+
+.musha-controls [data-action="attack"] {
+    grid-column: 1 / 5;
+    grid-row: 4;
+}
+
+.musha-controls [data-action="collect"] {
+    grid-column: 1 / 3;
+    grid-row: 5;
+}
+
+.musha-controls [data-action="activate_checkpoint"] {
+    grid-column: 3 / 5;
+    grid-row: 5;
+}
+
+.musha-controls [data-action="return_checkpoint"] {
+    grid-column: 1 / 3;
+    grid-row: 6;
+}
+
+.musha-controls [data-action="yield"] {
+    grid-column: 3 / 5;
+    grid-row: 6;
+}
+
+.musha-controls [data-action="train"] {
+    grid-column: 1 / 3;
+    grid-row: 7;
+}
+
+.musha-controls [data-action="flee"] {
+    grid-column: 3 / 5;
+    grid-row: 7;
+}
+
+.musha-legend {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.5rem;
+    background: var(--card-bg);
+}
+
+.musha-legend-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 0.5rem 1rem;
+    padding: 0;
+    list-style: none;
+}
+
+.musha-legend-key {
+    display: inline-grid;
+    min-width: 1.8rem;
+    margin-right: 0.25rem;
+    place-items: center;
+    color: var(--musha-moss);
+    font-weight: 700;
+}
+
+.musha-notes {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.musha-panel {
+    padding: 1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.5rem;
+    background: var(--card-bg);
+}
+
+.musha-journal {
+    padding-left: 1.2rem;
+    font-size: 0.9rem;
+}
+
+.musha-journal li + li,
+.musha-help li + li {
+    margin-top: 0.4rem;
+}
+
+.musha-help kbd {
+    margin-right: 0.2rem;
+}
+
+[data-bs-theme="dark"] #musha-shugyo {
+    --musha-ink: #e3e9d8;
+    --musha-moss: #a9bd8f;
+}
+
+[data-bs-theme="dark"] .musha-board {
+    border-color: #465644;
+    background: #28372d;
+}
+
+[data-bs-theme="dark"] .musha-cell {
+    background: #354336;
+    color: #e4e6d6;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-tree {
+    border-color: #293d31;
+    background: #304b3b;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-bush {
+    background: #52694a;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-hokora {
+    background: #564d34;
+    color: #ead9a1;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-resource {
+    background: #3d523b;
+    color: #c9dfa8;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-treasure {
+    background: #665536;
+    color: #f3d993;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-door {
+    background: #65573e;
+    color: #f0dfb8;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-player {
+    background: #c5d5ba;
+    color: #17362f;
+}
+
+[data-bs-theme="dark"] .musha-cell.is-creature {
+    background: #6a5142;
+    color: #f2dfcf;
+}
+
+@media (max-width: 760px) {
+    .musha-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .musha-board {
+        grid-template-columns: repeat(var(--musha-columns, 13), minmax(1.55rem, 1fr));
+        width: 100%;
+    }
+
+    .musha-cell {
+        aspect-ratio: 1;
+    }
+}

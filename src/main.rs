@@ -28,6 +28,7 @@ mod fitness;
 mod games;
 mod helpers;
 mod models;
+mod musha_shugyo;
 mod packages;
 mod schema;
 mod tetris;
@@ -475,6 +476,7 @@ async fn main() -> Result<(), rocket::Error> {
         .mount("/", fitness::routes())
         .mount("/", games::routes())
         .mount("/", tetris::routes())
+        .mount("/", musha_shugyo::routes())
         .mount("/", cards_elemental::routes())
         .manage(wasd5::remote_management::RemoteManagement::from_env()
             .expect("Invalid remote management configuration"))

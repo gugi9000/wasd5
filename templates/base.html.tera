@@ -168,6 +168,9 @@
                                     <a class="dropdown-item" href="/games/tetris">Tetris</a>
                                 </li>
                                 <li>
+                                    <a class="dropdown-item" href="/games/musha-shugyo">Musha Shugyo</a>
+                                </li>
+                                <li>
                                     <a class="dropdown-item" href="/games/cards-elemental">Cards Elemental</a>
                                 </li>
                             </ul>

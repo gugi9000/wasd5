@@ -202,6 +202,27 @@ diesel::table! {
 }
 
 diesel::table! {
+    musha_shugyo_journeys (user_id) {
+        user_id -> Integer,
+        journey_id -> Text,
+        world_month -> Text,
+        world_seed -> Text,
+        generator_version -> Integer,
+        current_turn -> Integer,
+        created_at -> BigInt,
+        updated_at -> BigInt,
+    }
+}
+
+diesel::table! {
+    musha_shugyo_actions (user_id, turn) {
+        user_id -> Integer,
+        turn -> BigInt,
+        action -> Text,
+    }
+}
+
+diesel::table! {
     comic_strips (id) {
         id -> Integer,
         album_id -> Integer,

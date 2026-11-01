@@ -16,6 +16,21 @@ and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space
 hard-drops. Tetris scores are submitted once per server-issued game run, but
 gameplay is client-side and scores are not independently replay-validated.
 
+Musha Shugyo is available at `/games/musha-shugyo` for signed-in accounts.
+Each account gets one persistent journey in the shared, deterministic world
+seeded for the month it began; the seed and generator version remain attached
+to that journey after the month changes. Explore, observe, collect resources
+and occasional treasures, and avoid creatures. Movement and creature responses
+resolve from the same pre-turn state. Rooms have matching doors, persistent
+resources, and occasional hokora checkpoints. Checkpoints secure carried finds
+and anchor the player's experience; returning restores that snapshot while leaving world changes in
+place. Resources regrow and creatures recover with game turns. Visible creatures within two tiles
+can be challenged: each side rolls one d6 per combat skill point, the higher roll deals one damage,
+and ties deal none. The player starts with combat 2 and 10 life, gains one experience per combat
+round, and can train up to combat 6 at hokora using experience and treasures. Matching dice can
+allow the player to flee back through the entry door at the cost of the room's combat experience;
+creatures can flee through the nearest door. One life is recovered per non-combat turn.
+
 The admin dashboard at `/admin` links to **Pages admin** at `/admin/pages`,
 where administrators can list, create and edit pages. Navigation shows **Login**
 for guests and an **Admin** dropdown with the dashboard's links and signed-in
