@@ -281,9 +281,9 @@
         if (!button || event.detail !== 0) return;
         void move(flagMode ? "flag" : "reveal", Number(button.dataset.index));
     });
-    boardHost.addEventListener("contextmenu", (event) => {
-        if (event.target.closest("button[data-index]")) event.preventDefault();
-    });
+    document.addEventListener("contextmenu", (event) => {
+        if (game?.status === "playing") event.preventDefault();
+    }, { capture: true });
 
     flagModeButton.addEventListener("click", () => {
         flagMode = !flagMode;
