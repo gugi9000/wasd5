@@ -119,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         users
             .filter(creatine_reminder.eq(1))
             .filter(disabled.eq(false))
+            .filter(wasd5::schema::users::role.ne("gamer"))
             .filter(email.is_not_null())
             .load::<User>(&mut conn)?
     };

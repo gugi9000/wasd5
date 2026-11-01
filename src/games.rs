@@ -1158,6 +1158,8 @@ mod tests {
         let score: serde_json::Value = score.into_json().unwrap();
         assert_eq!(score["player_name"], "Guest");
         assert!(score["user_id"].is_null());
+        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
+            .set(crate::schema::users::role.eq("gamer")).execute(&mut pool.get().unwrap()).unwrap();
 
         let duplicate = client
             .post(format!("/games/minesweeper/api/games/{id}/score"))
@@ -1276,5 +1278,8 @@ mod tests {
                 .iter()
                 .any(|entry| entry["player_name"] == "Guest")
         );
+        let page = client.get("/games/minesweeper").dispatch().into_string().unwrap();
+        assert!(page.contains("title=\"Verified account\">✅"));
+        assert!(page.contains("title=\"Anonymous player\">👻"));
     }
 }

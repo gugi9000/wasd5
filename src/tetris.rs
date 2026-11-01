@@ -409,5 +409,7 @@ mod tests {
             .unwrap();
         assert_eq!(scores[0]["score"], 5000);
         assert_eq!(scores[1]["score"], 1200);
+        let page = client.get("/games/tetris").dispatch().into_string().unwrap();
+        assert!(page.contains("title=\"Anonymous player\">👻"));
     }
 }

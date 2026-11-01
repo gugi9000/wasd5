@@ -65,6 +65,7 @@ pub struct ComicUser {
     id: i32,
     display_name: String,
     admin: bool,
+    gamer: bool,
 }
 
 pub struct Viewer(Option<ComicUser>);
@@ -84,6 +85,7 @@ impl<'r> FromRequest<'r> for Viewer {
                 id: u.id,
                 display_name: u.display_name().to_owned(),
                 admin: u.role == "admin",
+                gamer: u.role == "gamer",
             }))),
             Err(error) => {
                 eprintln!("Failed to authenticate comics viewer: {error}");
@@ -102,16 +104,25 @@ impl Viewer {
         self.0.as_ref().map(|user| user.display_name.as_str())
     }
 
+    pub(crate) fn is_gamer(&self) -> bool {
+        self.0.as_ref().is_some_and(|user| user.gamer)
+    }
+
+    pub(crate) fn member_identity(&self) -> Option<(i32, bool)> {
+        self.identity().filter(|_| !self.is_gamer())
+    }
+
     fn user(&self) -> Result<&ComicUser, ComicError> {
         self.0
             .as_ref()
+            .filter(|user| !user.gamer)
             .ok_or((Status::Unauthorized, "Sign in to manage comics".into()))
     }
 
     fn can_manage(&self, album: &Album) -> bool {
         self.0
             .as_ref()
-            .is_some_and(|user| user.admin || user.id == album.owner_id)
+            .is_some_and(|user| !user.gamer && (user.admin || user.id == album.owner_id))
     }
 
     fn require_manager(&self, album: &Album) -> Result<(), ComicError> {
@@ -236,10 +247,10 @@ fn index(
     let mut query = albums::table.into_boxed();
     match &viewer.0 {
         Some(user) if user.admin => {}
-        Some(user) => {
+        Some(user) if !user.gamer => {
             query = query.filter(albums::hidden.eq(false).or(albums::owner_id.eq(user.id)))
         }
-        None => query = query.filter(albums::hidden.eq(false)),
+        _ => query = query.filter(albums::hidden.eq(false)),
     }
     let items = query
         .order((albums::updated_at.desc(), albums::id.desc()))
@@ -247,7 +258,7 @@ fn index(
         .map_err(internal)?;
     Ok(Private(Template::render(
         "comics/index",
-        context! { pages: navigation.0, albums: items, user: viewer.0 },
+        context! { pages: navigation.0, albums: items, user: viewer.0.filter(|user| !user.gamer) },
     )))
 }
 

@@ -18,6 +18,10 @@
             throw new Error("Invalid account menu response.");
         }
         const signedIn = account.username !== null;
+        const gamer = account.gamer === true;
+        document.getElementById("account-admin-toggle").textContent = gamer ? "Games" : "Admin";
+        document.getElementById("account-admin-links").hidden = gamer;
+        document.getElementById("account-game-links").hidden = !gamer;
         username.textContent = signedIn ? `Signed in as ${account.username}` : "";
         login.hidden = signedIn;
         admin.hidden = !signedIn;

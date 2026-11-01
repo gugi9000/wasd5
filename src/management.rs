@@ -84,7 +84,7 @@ impl Section {
             Self::Users => vec![
                 ("username", "Username", Text),
                 ("display_name", "Display Name (blank uses username)", Text),
-                ("role", "Role: admin or member", Text),
+                ("role", "Role: admin, member or gamer", Text),
                 ("email", "Email (optional)", Text),
                 ("password", "Password (blank keeps existing)", Password),
                 ("disabled", "Disabled", Boolean),
@@ -451,9 +451,7 @@ pub(crate) fn save_authorized(
                 let p: UserInput = serde_json::from_value(values)?;
                 text(&p.username, "Username", 100)?;
                 let display_name = models::normalize_display_name(Some(&p.display_name))?;
-                if !matches!(p.role.as_str(), "admin" | "member" | "user") {
-                    return Err("Role must be admin or member (legacy user is also accepted)".into());
-                }
+                models::validate_role(&p.role)?;
                 if !p.email.is_empty() { p.email.parse::<lettre::Address>()?; }
                 if id.is_none() && p.password.is_empty() { return Err("A password is required for new users".into()); }
                 if !p.password.is_empty() && p.password.len() > 72 { return Err("Bcrypt passwords must be at most 72 bytes".into()); }

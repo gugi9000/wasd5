@@ -41,6 +41,26 @@ fn create(conn: &mut SqliteConnection, section: Section, changes: Value) -> Reco
 }
 
 #[test]
+fn gamer_role_is_saved_and_role_changes_revoke_sessions() {
+    let mut conn = database();
+    let gamer = create(&mut conn, Section::Users,
+        json!({"username":"gamer","password":"password","role":"gamer","display_name":"Player"}));
+    let user = users::table.find(gamer.id).first::<models::User>(&mut conn).unwrap();
+    assert_eq!(user.role, "gamer");
+    let mut values = gamer.values.clone();
+    values["role"] = json!("member");
+    management::save(&mut conn, Section::Users, Some(&gamer), values).unwrap();
+    let member = management::list(&mut conn, Section::Users).unwrap().into_iter().find(|row| row.id == gamer.id).unwrap();
+    let mut values = member.values.clone();
+    values["role"] = json!("gamer");
+    management::save(&mut conn, Section::Users, Some(&member), values).unwrap();
+    let user = users::table.find(gamer.id).first::<models::User>(&mut conn).unwrap();
+    assert_eq!(user.role, "gamer");
+    assert_eq!(user.session_version, 2);
+    assert!(models::validate_role("super-gamer").is_err());
+}
+
+#[test]
 fn users_disable_restore_passwords_and_last_admin_protection() {
     let mut conn = database();
     let admin = first(&mut conn, Section::Users);

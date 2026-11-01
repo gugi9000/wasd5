@@ -53,14 +53,14 @@ fn find(conn: &mut SqliteConnection, id: i32) -> Result<Timer> {
 
 fn user(viewer: &Viewer) -> Result<i32> {
     viewer
-        .identity()
+        .member_identity()
         .map(|(id, _)| id)
         .ok_or((Status::Unauthorized, "Sign in to save timers.".into()))
 }
 
 fn can_manage(viewer: &Viewer, timer: &Timer) -> bool {
     viewer
-        .identity()
+        .member_identity()
         .is_some_and(|(id, admin)| admin || id == timer.owner_id)
 }
 
@@ -100,7 +100,7 @@ fn index(
     Ok(Private(Template::render(
         "fitness/index",
         context! {
-            pages: navigation.0, timers: timers, signed_in: viewer.identity().is_some()
+            pages: navigation.0, timers: timers, signed_in: viewer.member_identity().is_some()
         },
     )))
 }

@@ -317,6 +317,7 @@ pub(crate) fn admin_login_post(
             let expiry = Utc::now().timestamp() + 24 * 3600;
             jar.add_private(Cookie::new("session_expires", expiry.to_string()));
             return Ok(Redirect::to(match f.next.as_deref() {
+                _ if u.role == "gamer" => "/games/minesweeper",
                 Some("comics") => "/comics",
                 Some("fitness") => "/health/timer",
                 _ => "/admin",
@@ -987,15 +988,20 @@ pub(crate) fn admin_users_update(
     } else {
         return Err((Status::Forbidden, "Invalid form token.".into()));
     }
-    let role_val = if f.role == "admin" { "admin" } else { "member" };
+    models::validate_role(&f.role).map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
+    let role_val = f.role;
     let email_val: Option<String> = f.email.filter(|s| !s.trim().is_empty());
     let display_name = models::normalize_display_name(f.display_name.as_deref())
         .map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
     use crate::schema::users::dsl::{email, id, role, users};
     let mut conn = pool.get().map_err(user_save_error)?;
-    diesel::update(users.filter(id.eq(user_id)))
-        .set((email.eq(email_val), role.eq(role_val), crate::schema::users::display_name.eq(display_name)))
-        .execute(&mut conn).map_err(user_save_error)?;
+    conn.immediate_transaction::<_, diesel::result::Error, _>(|conn| {
+        let old = users.find(user_id).first::<models::User>(conn)?;
+        diesel::update(users.filter(id.eq(user_id)))
+            .set((email.eq(email_val), role.eq(&role_val), crate::schema::users::display_name.eq(display_name),
+                crate::schema::users::session_version.eq(old.session_version + i64::from(old.role != role_val))))
+            .execute(conn)
+    }).map_err(user_save_error)?;
     Ok(Redirect::to("/admin/users"))
 }
 
@@ -1033,6 +1039,7 @@ pub(crate) fn admin_users_create(
     }
 
     let role_val = f.role.unwrap_or_else(|| "member".to_string());
+    models::validate_role(&role_val).map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
     let pw_hash = hash(&f.password, DEFAULT_COST).map_err(user_save_error)?;
     let display_name = models::normalize_display_name(f.display_name.as_deref())
         .map_err(|e| (Status::UnprocessableEntity, e.to_string()))?;
@@ -1305,6 +1312,10 @@ pub(crate) fn create_user(
     }
     use crate::schema::users::dsl::*;
     let role_val = payload.role.clone().unwrap_or_else(|| "member".to_string());
+    models::validate_role(&role_val).map_err(|e| {
+        eprintln!("Invalid user role: {e}");
+        Status::UnprocessableEntity
+    })?;
     let pw_hash = hash(&payload.password, DEFAULT_COST).map_err(|_| Status::InternalServerError)?;
     let new = models::NewUser {
         username: &payload.username,

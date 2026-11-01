@@ -16,6 +16,9 @@ use crate::models;
 
 /// Returns the logged-in user's ID when there is a valid, non-expired session.
 fn get_session_user_id(jar: &CookieJar) -> Option<i32> {
+    if wasd5::auth::cookie(jar, "user_role").is_some_and(|role| role.value() == "gamer") {
+        return None;
+    }
     let exp = wasd5::auth::cookie(jar, "session_expires")?;
     let ts: i64 = exp.value().parse().ok()?;
     if ts <= Utc::now().timestamp() {

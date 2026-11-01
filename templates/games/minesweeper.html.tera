@@ -45,7 +45,7 @@
 
     <section class="mt-5" aria-labelledby="leaderboard-title">
         <h2 id="leaderboard-title" class="h3">Leaderboards</h2>
-        <p>Times are measured and validated by the server. <span class="badge text-bg-success">Account</span> marks a score submitted by a signed-in user; guest names are not verified.</p>
+        <p>Times are measured and validated by the server. <span role="img" aria-label="Verified account">✅</span> marks a signed-in player; <span role="img" aria-label="Anonymous player">👻</span> marks an unverified guest.</p>
         <div class="row g-3">
             <div class="col-lg-4">
                 <h3 class="h5">Easy</h3>
@@ -56,7 +56,7 @@
                             {% for score in easy_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
                                 <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
                             </tr>
                             {% else %}
@@ -75,7 +75,7 @@
                             {% for score in intermediate_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
                                 <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
                             </tr>
                             {% else %}
@@ -94,7 +94,7 @@
                             {% for score in advanced_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
                                 <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
                             </tr>
                             {% else %}

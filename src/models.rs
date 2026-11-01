@@ -31,6 +31,14 @@ impl User {
     }
 }
 
+pub fn validate_role(role: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if matches!(role, "admin" | "member" | "user" | "gamer") {
+        Ok(())
+    } else {
+        Err("Role must be admin, member or gamer (legacy user is also accepted)".into())
+    }
+}
+
 pub fn normalize_display_name(
     name: Option<&str>,
 ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {

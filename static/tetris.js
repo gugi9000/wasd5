@@ -125,13 +125,12 @@
                 row.insertCell().textContent = String(index + 1);
                 const player = row.insertCell();
                 player.append(document.createTextNode(`${score.player_name} `));
-                if (score.user_id !== null) {
-                    const badge = document.createElement("span");
-                    badge.className = "badge text-bg-success";
-                    badge.title = "Signed-in account";
-                    badge.textContent = "Account";
-                    player.append(badge);
-                }
+                const badge = document.createElement("span");
+                badge.title = score.user_id !== null ? "Verified account" : "Anonymous player";
+                badge.setAttribute("role", "img");
+                badge.setAttribute("aria-label", badge.title);
+                badge.textContent = score.user_id !== null ? "✅" : "👻";
+                player.append(badge);
                 row.insertCell().textContent = String(score.score);
                 row.insertCell().textContent = String(score.lines);
                 row.insertCell().textContent = String(score.level);

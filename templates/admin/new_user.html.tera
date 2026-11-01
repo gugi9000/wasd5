@@ -23,6 +23,7 @@
       <label class="form-label">Role</label>
       <select name="role" class="form-select">
         <option value="member">member</option>
+        <option value="gamer">gamer (games only)</option>
         <option value="admin">admin</option>
       </select>
     </div>

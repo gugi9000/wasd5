@@ -25,7 +25,7 @@ enum Commands {
         display_name: Option<String>,
         /// password
         password: String,
-        /// role (admin/member)
+        /// role (admin/member/gamer)
         #[arg(short, long)]
         role: Option<String>,
     },
@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         } => {
             use wasd5::schema::users::dsl::users;
             let role_val = role.unwrap_or_else(|| "member".to_string());
+            models::validate_role(&role_val)?;
             let pw_hash = hash(&password, bcrypt::DEFAULT_COST)?;
             let new = models::NewUser {
                 username: username.as_str(),

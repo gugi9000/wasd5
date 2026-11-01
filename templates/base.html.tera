@@ -216,11 +216,21 @@
                             <span id="account-username" class="small me-2"></span>
                             <button id="account-admin-toggle" class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Admin</button>
                             <div class="dropdown-menu dropdown-menu-end" aria-labelledby="account-admin-toggle">
+                                <div id="account-admin-links">
                                 <a class="dropdown-item" href="/admin">Admin Dashboard</a>
                                 <hr class="dropdown-divider">
                                 {% set admin_menu_class = "dropdown-item" %}
                                 {% set admin_menu_descriptions = false %}
                                 {% include "admin/menu" %}
+                                </div>
+                                <div id="account-game-links" hidden>
+                                    <a class="dropdown-item" href="/games/minesweeper">Minesweeper</a>
+                                    <a class="dropdown-item" href="/games/tetris">Tetris</a>
+                                    <a class="dropdown-item" href="/games/cards-elemental">Cards Elemental</a>
+                                    <a class="dropdown-item" href="/games/musha-shugyo">Musha Shugyo</a>
+                                    <hr class="dropdown-divider">
+                                    <a class="dropdown-item text-danger" href="/admin/logout">Logout</a>
+                                </div>
                             </div>
                         </div>
                         <span id="account-menu-error" class="text-danger small me-2" role="alert" hidden></span>

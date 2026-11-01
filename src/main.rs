@@ -54,6 +54,7 @@ const STATIC_DIR: &str = "static";
 fn navigation_account(viewer: comics::Viewer) -> comics::Private<rocket::serde::json::Json<serde_json::Value>> {
     comics::Private(rocket::serde::json::Json(serde_json::json!({
         "username": viewer.display_name(),
+        "gamer": viewer.is_gamer(),
     })))
 }
 
@@ -549,6 +550,123 @@ async fn main() -> Result<(), rocket::Error> {
 }
 
 #[cfg(test)]
+mod gamer_tests {
+    use super::*;
+    use diesel::prelude::*;
+    use rocket::http::ContentType;
+    use rocket::local::blocking::Client;
+    use serde_json::{Value, json};
+
+    #[test]
+    fn gamer_accounts_play_verified_games_without_member_privileges() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::establish_pool(dir.path().join("gamer.db").to_str().unwrap());
+        let mut conn = pool.get().unwrap();
+        db::run_migrations(&mut conn).unwrap();
+        diesel::insert_into(schema::users::table).values((
+            models::NewUser {
+                username: "gamer", password_hash: &bcrypt::hash("password", 4).unwrap(),
+                role: "gamer", created_at: 1, email: None,
+            },
+            schema::users::display_name.eq(Some("Verified Gamer")),
+        )).execute(&mut conn).unwrap();
+        let user_id = schema::users::table.select(schema::users::id).first::<i32>(&mut conn).unwrap();
+        let app = rocket::custom(rocket::Config::debug_default())
+            .attach(wasd5::auth::sessions())
+            .manage(pool.clone())
+            .manage(comics::ComicStorage::initialize(dir.path().join("comics")).unwrap())
+            .mount("/", games::routes()).mount("/", tetris::routes())
+            .mount("/", cards_elemental::routes()).mount("/", musha_shugyo::routes())
+            .mount("/", fitness::routes()).mount("/", comics::routes())
+            .mount("/", routes![admin_login_post, admin_logout, admin_index, admin_pages_index,
+                navigation_account, list_packages, create_package, delete_package, update_tracking,
+                mark_received, creatine_index, creatine_log, creatine_delete, creatine_reminder_toggle])
+            .attach(Template::custom(|engines| {
+                engines.tera.register_filter("category", category_filter);
+            }));
+        let client = Client::tracked(app).unwrap();
+        let response = client.post("/admin/login").header(ContentType::Form)
+            .body("username=gamer&password=password&next=fitness").dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        assert_eq!(response.headers().get_one("Location"), Some("/games/minesweeper"));
+        let account: Value = client.get("/api/navigation/account").dispatch().into_json().unwrap();
+        assert_eq!(account["username"], "Verified Gamer");
+        assert_eq!(account["gamer"], true);
+        for uri in ["/games/minesweeper", "/games/tetris", "/games/cards-elemental", "/games/musha-shugyo"] {
+            assert_eq!(client.get(uri).dispatch().status(), Status::Ok, "{uri}");
+        }
+        for uri in ["/admin", "/admin/pages", "/packages", "/creatine"] {
+            assert_eq!(client.get(uri).dispatch().headers().get_one("Location"), Some("/admin/login"), "{uri}");
+        }
+        for uri in ["/comics/new", "/health/timer/new"] {
+            assert_eq!(client.get(uri).dispatch().status(), Status::Unauthorized, "{uri}");
+        }
+        assert_eq!(client.get("/comics").dispatch().status(), Status::Ok);
+        let timer_index = client.get("/health/timer").dispatch().into_string().unwrap();
+        assert!(!timer_index.contains("href=\"/health/timer/new\""));
+        let csrf = client.cookies().get_private("csrf").unwrap().value().to_owned();
+        for (uri, body) in [
+            ("/packages/new", format!("name=Test&tracking_id=&ordered_date=2026-11-01&csrf={csrf}")),
+            ("/packages/1/delete", format!("csrf={csrf}")),
+            ("/packages/1/tracking", format!("tracking_id=Test&csrf={csrf}")),
+            ("/packages/1/received", format!("csrf={csrf}")),
+            ("/creatine/log", format!("amount_grams=5&csrf={csrf}")),
+            ("/creatine/delete", format!("date=2026-11-01&csrf={csrf}")),
+            ("/creatine/reminder", format!("enabled=1&csrf={csrf}")),
+        ] {
+            let response = client.post(uri).header(ContentType::Form).body(body).dispatch();
+            assert_eq!(response.headers().get_one("Location"), Some("/admin/login"), "{uri}: {}", response.status());
+        }
+        // Formerly owned content must not grant privileges after a role change.
+        diesel::insert_into(schema::comic_albums::table).values((
+            schema::comic_albums::owner_id.eq(user_id), schema::comic_albums::title.eq("Secret album"),
+            schema::comic_albums::subtext.eq(""), schema::comic_albums::hidden.eq(true),
+            schema::comic_albums::created_at.eq(1_i64), schema::comic_albums::updated_at.eq(1_i64),
+        )).execute(&mut conn).unwrap();
+        let album_id = schema::comic_albums::table.select(schema::comic_albums::id).first::<i32>(&mut conn).unwrap();
+        assert_eq!(client.get(format!("/comics/{album_id}")).dispatch().status(), Status::NotFound);
+        assert_eq!(client.get(format!("/comics/{album_id}/edit")).dispatch().status(), Status::NotFound);
+        diesel::update(schema::comic_albums::table.find(album_id))
+            .set(schema::comic_albums::hidden.eq(false)).execute(&mut conn).unwrap();
+        assert_eq!(client.get(format!("/comics/{album_id}/edit")).dispatch().status(), Status::Forbidden);
+        diesel::update(schema::comic_albums::table.find(album_id))
+            .set(schema::comic_albums::hidden.eq(true)).execute(&mut conn).unwrap();
+        let albums = client.get("/comics").dispatch().into_string().unwrap();
+        assert!(!albums.contains("Secret album"));
+        let workout = json!({"repeats":1,"blocks":[{"repeats":1,"steps":[{"label":"Work","seconds":20,"repeats":1}]}]});
+        diesel::insert_into(schema::fitness_timers::table).values((
+            schema::fitness_timers::owner_id.eq(user_id), schema::fitness_timers::title.eq("Former timer"),
+            schema::fitness_timers::description.eq(""), schema::fitness_timers::workout.eq(workout.to_string()),
+            schema::fitness_timers::created_at.eq(1_i64), schema::fitness_timers::updated_at.eq(1_i64),
+        )).execute(&mut conn).unwrap();
+        let timer_id = schema::fitness_timers::table.select(schema::fitness_timers::id).first::<i32>(&mut conn).unwrap();
+        assert_eq!(client.get(format!("/health/timer/{timer_id}/edit")).dispatch().status(), Status::Forbidden);
+        let payload = json!({"csrf":csrf,"title":"Test","description":"","workout":workout});
+        assert_eq!(client.post("/health/timer").header(ContentType::JSON).body(payload.to_string())
+            .dispatch().status(), Status::Unauthorized);
+        assert_eq!(client.post(format!("/health/timer/{timer_id}")).header(ContentType::JSON).body(payload.to_string())
+            .dispatch().status(), Status::Forbidden);
+        assert_eq!(client.post(format!("/health/timer/{timer_id}/delete")).header(ContentType::JSON)
+            .body(json!({"csrf":csrf}).to_string()).dispatch().status(), Status::Forbidden);
+        let run: Value = client.post("/games/tetris/api/runs").header(ContentType::JSON)
+            .body(json!({"csrf":csrf}).to_string()).dispatch().into_json().unwrap();
+        diesel::update(schema::tetris_runs::table.find(run["id"].as_str().unwrap()))
+            .set(schema::tetris_runs::created_at.eq(Utc::now().timestamp_millis() - 11_000))
+            .execute(&mut conn).unwrap();
+        let score: Value = client.post(format!("/games/tetris/api/runs/{}/score", run["id"].as_str().unwrap()))
+            .header(ContentType::JSON).body(json!({"csrf":csrf,"score":100,"lines":0,"level":1,"player_name":"Spoofed"}).to_string())
+            .dispatch().into_json().unwrap();
+        assert_eq!(score["user_id"], user_id);
+        assert_eq!(score["player_name"], "Verified Gamer");
+        let leaderboard = client.get("/games/tetris").dispatch().into_string().unwrap();
+        assert!(leaderboard.contains("title=\"Verified account\">✅"));
+        let online: Value = client.post("/games/cards-elemental/api/online").header(ContentType::JSON)
+            .body(json!({"csrf":csrf,"visibility":"public"}).to_string()).dispatch().into_json().unwrap();
+        assert_eq!(online["your_name"], "Verified Gamer");
+    }
+}
+
+#[cfg(test)]
 mod page_tests {
     use super::*;
     use diesel::prelude::*;
@@ -710,6 +828,12 @@ mod page_tests {
         assert_eq!(response.status(), Status::SeeOther);
         let user = schema::users::table.find(user.id).first::<models::User>(&mut conn).unwrap();
         assert_eq!(user.display_name(), "Updated Display");
+        let response = client.post(format!("/admin/users/{}/update", user.id)).header(ContentType::Form)
+            .body(format!("display_name=Updated+Display&role=gamer&csrf={csrf}")).dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        let gamer = schema::users::table.find(user.id).first::<models::User>(&mut conn).unwrap();
+        assert_eq!(gamer.role, "gamer");
+        assert_eq!(gamer.session_version, 1);
         let response = client.post(format!("/admin/users/{}/update", user.id)).header(ContentType::Form)
             .body(format!("display_name={}&role=member&csrf={csrf}", "x".repeat(101))).dispatch();
         assert_eq!(response.status(), Status::UnprocessableEntity);

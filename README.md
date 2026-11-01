@@ -86,6 +86,14 @@ reminder greetings and new page attribution use Display Names. Historical page
 attribution remains unchanged. Account scores and PvP labels resolve current
 Display Names when loaded.
 
+The **gamer** role grants signed-in game access and verified leaderboard entries,
+but no member-only comic/timer management, packages or creatine access, and no
+admin access. Public content remains accessible as it is for guests. Select
+`gamer` in user administration, local/remote `manage`, or `cli create-user --role gamer`.
+Gamers land on Minesweeper after login and see a Games account menu with Logout.
+Role changes revoke existing sessions. Leaderboards mark accounts with ✅ and
+anonymous guest names with 👻; account verification does not validate Tetris gameplay.
+
 Cards Elemental is available at `/games/cards-elemental` as a solo game against
 the server or as an online two-player game. Choose **Tosser** for random solo
 play, **Pro** for a strategic opponent, or **Pro2** for stronger colour-pair

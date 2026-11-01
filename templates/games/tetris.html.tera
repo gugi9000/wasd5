@@ -58,7 +58,7 @@
 
     <section class="mt-5" aria-labelledby="tetris-leaderboard-title">
         <h2 id="tetris-leaderboard-title" class="h3">Leaderboard</h2>
-        <p><span class="badge text-bg-success">Account</span> marks a signed-in player. Guest names are unverified.</p>
+        <p><span role="img" aria-label="Verified account">✅</span> marks a signed-in player; <span role="img" aria-label="Anonymous player">👻</span> marks an unverified guest.</p>
         <div class="table-responsive">
             <table class="table table-sm align-middle">
                 <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Score</th><th scope="col">Lines</th><th scope="col">Level</th></tr></thead>
@@ -66,7 +66,7 @@
                     {% for score in leaderboard %}
                     <tr>
                         <th scope="row">{{ loop.index }}</th>
-                        <td>{{ score.player_name }}{% if score.user_id %} <span class="badge text-bg-success" title="Signed-in account">Account</span>{% endif %}</td>
+                        <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
                         <td>{{ score.score }}</td>
                         <td>{{ score.lines }}</td>
                         <td>{{ score.level }}</td>

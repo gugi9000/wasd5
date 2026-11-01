@@ -24,6 +24,9 @@ async function menu(account, ok = true) {
         "account-admin": { hidden: true },
         "account-username": { textContent: "" },
         "account-menu-error": { hidden: true, textContent: "" },
+        "account-admin-toggle": { textContent: "Admin" },
+        "account-admin-links": { hidden: false },
+        "account-game-links": { hidden: true },
     };
     await vm.runInNewContext(
         fs.readFileSync(path.join(__dirname, "..", "static", "account-menu.js"), "utf8"),
@@ -60,6 +63,15 @@ test("failed or malformed account responses show an explicit error", async () =>
         assert.ok(elements["account-menu-error"].textContent);
         assert.equal(elements["account-admin"].hidden, true);
     }
+});
+
+test("gamers see game links and Logout rather than admin links", async () => {
+    const elements = await menu({ username: "Gamer", gamer: true });
+    assert.equal(elements["account-admin"].hidden, false);
+    assert.equal(elements["account-admin-toggle"].textContent, "Games");
+    assert.equal(elements["account-admin-links"].hidden, true);
+    assert.equal(elements["account-game-links"].hidden, false);
+    assert.equal(elements["account-username"].textContent, "Signed in as Gamer");
 });
 
 test("dashboard and navigation share all admin menu links", () => {

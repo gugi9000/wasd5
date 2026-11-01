@@ -49,6 +49,7 @@
         <td>
           <select name="role" form="uf-{{ u.id }}" class="form-select form-select-sm">
             <option value="member"{% if u.role == "member" %} selected{% endif %}>member</option>
+            <option value="gamer"{% if u.role == "gamer" %} selected{% endif %}>gamer (games only)</option>
             <option value="admin"{% if u.role == "admin" %} selected{% endif %}>admin</option>
           </select>
         </td>

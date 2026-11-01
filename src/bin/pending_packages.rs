@@ -240,8 +240,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         };
 
         let subject = format!("📦 {} pending package(s) waiting for you", pkgs.len());
-        if u.disabled {
-            println!("Skipping disabled account {}", u.display_name());
+        if u.disabled || u.role == "gamer" {
+            println!("Skipping disabled or game-only account {}", u.display_name());
             skipped += 1;
             continue;
         }

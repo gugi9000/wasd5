@@ -1,0 +1,1 @@
+{% if score.user_id %}<span role="img" aria-label="Verified account" title="Verified account">✅</span>{% else %}<span role="img" aria-label="Anonymous player" title="Anonymous player">👻</span>{% endif %}
