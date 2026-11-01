@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod player_auth;
 pub mod cards_elemental_core;
 pub mod db;
 pub mod editor;

@@ -16,6 +16,39 @@ it flags deduced mines, reveals safe cells, and guesses randomly when stuck.
 Page interaction stops auto-solving; **New game** starts a fresh board.
 Configure the delay with `IDLE_DELAY_MS` in `static/minesweeper.js`.
 
+### Native Minesweeper client API
+
+The Bevy client uses player-only bearer tokens, separate from browser cookies
+and admin remote-management sessions. Deploy the server changes (including
+migration `00000000000023_create_player_sessions`, run automatically at startup)
+behind HTTPS before enabling client login. Preserve the `Authorization` header
+through the reverse proxy. No CORS access is enabled.
+
+- `POST /api/player/login`: JSON `username`, `password`, optional `remember`;
+  returns `token`, `display_name`, `expires_at`.
+- `GET /api/player/me`: validates `Authorization: Bearer <token>` and returns
+  the current `display_name`.
+- `POST /api/player/logout`: revokes the current bearer token.
+- `POST /api/player/minesweeper/games`: authenticated JSON `mode`, with optional
+  `rows`, `columns`, `mine_count` for custom games.
+- `GET /api/player/minesweeper/games/<id>`: reloads an owned game.
+- `POST /api/player/minesweeper/games/<id>/move`: JSON `action` (`reveal`,
+  `flag`, `chord`), `row`, `column`.
+- `POST /api/player/minesweeper/games/<id>/score`: JSON `{}`; accepts only
+  server-completed fixed modes and uses the authenticated Display Name.
+  Retrying is idempotent and never creates duplicate scores.
+- `GET /games/minesweeper/api/scores`: public shared top-ten leaderboards.
+
+Native game requests require bearer authentication, not browser CSRF tokens.
+Browser routes retain their existing cookie/CSRF checks. Tokens are stored
+hashed in the database, last 12 hours (30 days with `remember`), and are
+invalidated by logout, expiry, disabled accounts or account session-version
+changes. Successful authentication/profile responses are non-cacheable.
+Login is limited to five attempts per peer-address/username pair per five
+minutes (including successful attempts); reverse-proxied users share the peer
+address limit for a given username. Credentials and raw tokens must not be
+logged. Offline Bevy games never submit scores.
+
 Tetris is available at `/games/tetris`. Use H/J/K/L or the arrow keys to move
 and soft-drop; K/Up rotates counter-clockwise, I/Enter clockwise, and Space
 hard-drops. Tetris scores are submitted once per server-issued game run, but

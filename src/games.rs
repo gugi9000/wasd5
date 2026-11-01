@@ -14,7 +14,17 @@ type GameError = (Status, String);
 type GameResult<T> = Result<T, GameError>;
 
 pub fn routes() -> Vec<rocket::Route> {
-    rocket::routes![index, start, play, submit_score, leaderboard]
+    rocket::routes![
+        index,
+        start,
+        play,
+        submit_score,
+        leaderboard,
+        native_start,
+        native_play,
+        native_score,
+        native_board
+    ]
 }
 
 #[derive(Queryable, Selectable)]
@@ -91,6 +101,7 @@ struct StartRequest {
     rows: Option<usize>,
     columns: Option<usize>,
     mine_count: Option<usize>,
+    #[serde(default)]
     csrf: String,
 }
 
@@ -99,12 +110,14 @@ struct MoveRequest {
     action: String,
     row: usize,
     column: usize,
+    #[serde(default)]
     csrf: String,
 }
 
 #[derive(Deserialize)]
 struct ScoreRequest {
     player_name: Option<String>,
+    #[serde(default)]
     csrf: String,
 }
 
@@ -287,7 +300,9 @@ fn load_leaderboard(conn: &mut SqliteConnection, mode_name: &str) -> GameResult<
         .limit(10)
         .load::<Score>(conn)
         .map_err(internal)?;
-    let names = crate::models::account_display_names(conn, scores.iter().filter_map(|score| score.user_id)).map_err(internal)?;
+    let names =
+        crate::models::account_display_names(conn, scores.iter().filter_map(|score| score.user_id))
+            .map_err(internal)?;
     for score in &mut scores {
         if let Some(name) = score.user_id.and_then(|id| names.get(&id)) {
             score.player_name.clone_from(name);
@@ -329,13 +344,20 @@ fn start(
     request: Json<StartRequest>,
 ) -> GameResult<Private<Json<GameView>>> {
     csrf(jar, &request.csrf)?;
+    start_game(pool, &request, viewer.identity().map(|(id, _)| id))
+}
+
+fn start_game(
+    pool: &DbPool,
+    request: &StartRequest,
+    user_id: Option<i32>,
+) -> GameResult<Private<Json<GameView>>> {
     let (mode, rows, columns, mine_count) = settings(&request)?;
     let id = Uuid::new_v4();
     let mines = shuffled_mines(&id, rows * columns, mine_count);
     let blank = vec![false; rows * columns];
     let mines_json = serde_json::to_string(&mines).map_err(internal)?;
     let blank_json = serde_json::to_string(&blank).map_err(internal)?;
-    let user_id = viewer.identity().map(|(id, _)| id);
     let game_id = id.as_hyphenated().to_string();
     let game = NewGame {
         id: &game_id,
@@ -387,9 +409,18 @@ fn play(
     request: Json<MoveRequest>,
 ) -> GameResult<Private<Json<GameView>>> {
     csrf(jar, &request.csrf)?;
+    play_game(&id, pool, &request, viewer.identity().map(|(id, _)| id))
+}
+
+fn play_game(
+    id: &str,
+    pool: &DbPool,
+    request: &MoveRequest,
+    user_id: Option<i32>,
+) -> GameResult<Private<Json<GameView>>> {
     let mut conn = pool.get().map_err(internal)?;
     let mut game = games::table
-        .find(&id)
+        .find(id)
         .first::<Game>(&mut conn)
         .optional()
         .map_err(internal)?
@@ -397,7 +428,7 @@ fn play(
     if game.created_at < chrono::Utc::now().timestamp_millis() - 86_400_000 {
         return Err((Status::NotFound, "Game not found or expired.".into()));
     }
-    if game.user_id != viewer.identity().map(|(id, _)| id) {
+    if game.user_id != user_id {
         return Err((
             Status::Forbidden,
             "This game belongs to a different player.".into(),
@@ -481,7 +512,7 @@ fn play(
     game.elapsed_ms = elapsed;
     let changed = diesel::update(
         games::table
-            .filter(games::id.eq(&id))
+            .filter(games::id.eq(id))
             .filter(games::status.eq("playing"))
             .filter(games::started_at.eq(original_started_at))
             .filter(games::mines.eq(original_mines))
@@ -520,9 +551,25 @@ fn submit_score(
     request: Json<ScoreRequest>,
 ) -> GameResult<Private<Json<Score>>> {
     csrf(jar, &request.csrf)?;
+    save_score(
+        &id,
+        pool,
+        &request,
+        viewer.identity().map(|(id, _)| id),
+        viewer.display_name(),
+    )
+}
+
+fn save_score(
+    id: &str,
+    pool: &DbPool,
+    request: &ScoreRequest,
+    identity: Option<i32>,
+    display_name: Option<&str>,
+) -> GameResult<Private<Json<Score>>> {
     let mut conn = pool.get().map_err(internal)?;
     let game = games::table
-        .find(&id)
+        .find(id)
         .first::<Game>(&mut conn)
         .optional()
         .map_err(internal)?
@@ -533,14 +580,13 @@ fn submit_score(
             "Only completed fixed-mode games can be added to a leaderboard.".into(),
         ));
     }
-    let identity = viewer.identity().map(|(id, _)| id);
     if game.user_id != identity {
         return Err((
             Status::Forbidden,
             "Scores must be submitted by the same player who started the game.".into(),
         ));
     }
-    let player_name = if let Some(username) = viewer.display_name() {
+    let player_name = if let Some(username) = display_name {
         username.to_owned()
     } else {
         let name = request.player_name.as_deref().unwrap_or("").trim();
@@ -596,6 +642,102 @@ fn leaderboard(pool: &State<DbPool>) -> GameResult<Private<Json<Leaderboards>>> 
     })))
 }
 
+#[post("/api/player/minesweeper/games", format = "json", data = "<request>")]
+fn native_start(
+    pool: &State<DbPool>,
+    player: wasd5::player_auth::Player,
+    request: Json<StartRequest>,
+) -> GameResult<Private<Json<GameView>>> {
+    native_clock(start_game(pool, &request, Some(player.user.id)), pool)
+}
+
+#[post(
+    "/api/player/minesweeper/games/<id>/move",
+    format = "json",
+    data = "<request>"
+)]
+fn native_play(
+    id: String,
+    pool: &State<DbPool>,
+    player: wasd5::player_auth::Player,
+    request: Json<MoveRequest>,
+) -> GameResult<Private<Json<GameView>>> {
+    native_clock(play_game(&id, pool, &request, Some(player.user.id)), pool)
+}
+
+#[post(
+    "/api/player/minesweeper/games/<id>/score",
+    format = "json",
+    data = "<request>"
+)]
+fn native_score(
+    id: String,
+    pool: &State<DbPool>,
+    player: wasd5::player_auth::Player,
+    request: Json<ScoreRequest>,
+) -> GameResult<Private<Json<Score>>> {
+    match save_score(
+        &id,
+        pool,
+        &request,
+        Some(player.user.id),
+        Some(player.user.display_name()),
+    ) {
+        Err((status, _)) if status == Status::Conflict => {
+            // Retrying after a lost response must not duplicate a score.
+            let mut conn = pool.get().map_err(internal)?;
+            let score = scores::table
+                .filter(scores::game_id.eq(&id))
+                .filter(scores::user_id.eq(Some(player.user.id)))
+                .first::<Score>(&mut conn)
+                .map_err(internal)?;
+            Ok(Private(Json(score)))
+        }
+        result => result,
+    }
+}
+
+#[get("/api/player/minesweeper/games/<id>")]
+fn native_board(
+    id: String,
+    pool: &State<DbPool>,
+    player: wasd5::player_auth::Player,
+) -> GameResult<Private<Json<GameView>>> {
+    let mut conn = pool.get().map_err(internal)?;
+    let game = games::table
+        .find(&id)
+        .first::<Game>(&mut conn)
+        .optional()
+        .map_err(internal)?
+        .filter(|g| g.created_at >= chrono::Utc::now().timestamp_millis() - 86_400_000)
+        .ok_or((Status::NotFound, "Game not found or expired.".into()))?;
+    if game.user_id != Some(player.user.id) {
+        return Err((
+            Status::Forbidden,
+            "This game belongs to a different player.".into(),
+        ));
+    }
+    native_clock(Ok(Private(Json(game_view(&game)?))), pool)
+}
+
+fn native_clock(
+    result: GameResult<Private<Json<GameView>>>,
+    pool: &DbPool,
+) -> GameResult<Private<Json<GameView>>> {
+    let mut response = result?;
+    let view = &mut response.0;
+    if view.clock_started && view.status == "playing" {
+        let mut conn = pool.get().map_err(internal)?;
+        let started_at = games::table
+            .find(&view.id)
+            .select(games::started_at)
+            .first::<i64>(&mut conn)
+            .map_err(internal)?;
+        view.elapsed_ms = Some((chrono::Utc::now().timestamp_millis() - started_at).max(0));
+    }
+    Ok(response)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -622,16 +764,272 @@ mod tests {
         let app = rocket::custom(rocket::Config::debug_default())
             .attach(wasd5::auth::sessions())
             .manage(pool.clone())
+            .manage(wasd5::player_auth::PlayerLoginLimits::default())
+            .mount("/", wasd5::player_auth::routes())
+            .register("/api/player", wasd5::player_auth::catchers())
             .mount("/", routes())
             .mount(
                 "/",
                 rocket::routes![
                     crate::admin::admin_login_get,
-                    crate::admin::admin_login_post
+                    crate::admin::admin_login_post,
+                    crate::admin::admin_index
                 ],
             )
             .attach(Template::fairing());
         (Client::tracked(app).unwrap(), dir, pool)
+    }
+
+    fn player_login(client: &Client, username: &str) -> String {
+        let response = client
+            .post("/api/player/login")
+            .remote("127.0.0.1:12345".parse().unwrap())
+            .header(ContentType::JSON)
+            .body(
+                serde_json::json!({"username": username, "password": "password", "remember": true})
+                    .to_string(),
+            )
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(
+            response.headers().get_one("Cache-Control"),
+            Some("private, no-store")
+        );
+        let result: serde_json::Value = response.into_json().unwrap();
+        result["token"].as_str().unwrap().to_owned()
+    }
+
+    #[test]
+    fn native_login_ranked_game_and_logout() {
+        let (client, _dir, pool) = client();
+        let token = player_login(&client, "Trusted");
+        let auth = || rocket::http::Header::new("Authorization", format!("Bearer {token}"));
+        let stored: String = wasd5::schema::player_sessions::table
+            .select(wasd5::schema::player_sessions::token_hash)
+            .first(&mut pool.get().unwrap())
+            .unwrap();
+        assert_ne!(stored, token);
+        assert_eq!(stored.len(), 64);
+        assert_eq!(
+            client
+                .post("/api/player/minesweeper/games")
+                .header(ContentType::JSON)
+                .body(r#"{"mode":"easy"}"#)
+                .dispatch()
+                .status(),
+            Status::Unauthorized
+        );
+        // Native tokens do not authenticate browser/admin endpoints.
+        let admin = client.get("/admin").header(auth()).dispatch();
+        assert_eq!(admin.status(), Status::SeeOther);
+        assert_eq!(admin.headers().get_one("Location"), Some("/admin/login"));
+        assert_eq!(
+            client
+                .post("/games/minesweeper/api/games")
+                .header(auth())
+                .header(ContentType::JSON)
+                .body(r#"{"mode":"easy"}"#)
+                .dispatch()
+                .status(),
+            Status::Forbidden
+        );
+        let response = client
+            .post("/api/player/minesweeper/games")
+            .header(auth())
+            .header(ContentType::JSON)
+            .body(r#"{"mode":"easy"}"#)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let mut view: serde_json::Value = response.into_json().unwrap();
+        let id = view["id"].as_str().unwrap().to_owned();
+        assert!(
+            view["cells"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|c| c["mine"] == false && c["count"] == 0)
+        );
+        assert_eq!(
+            client
+                .post(format!("/api/player/minesweeper/games/{id}/score"))
+                .header(auth())
+                .header(ContentType::JSON)
+                .body("{}")
+                .dispatch()
+                .status(),
+            Status::UnprocessableEntity
+        );
+        let mines: Vec<bool> = serde_json::from_str(
+            &games::table
+                .find(&id)
+                .select(games::mines)
+                .first::<String>(&mut pool.get().unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        for (index, mine) in mines.iter().enumerate() {
+            if *mine || view["cells"][index]["revealed"] == true || view["status"] == "won" {
+                continue;
+            }
+            let response = client
+                .post(format!("/api/player/minesweeper/games/{id}/move"))
+                .header(auth())
+                .header(ContentType::JSON)
+                .body(
+                    serde_json::json!({"action":"reveal","row":index/9,"column":index%9})
+                        .to_string(),
+                )
+                .dispatch();
+            assert_eq!(response.status(), Status::Ok);
+            view = response.into_json().unwrap();
+        }
+        assert_eq!(view["status"], "won");
+        let response = client
+            .post(format!("/api/player/minesweeper/games/{id}/score"))
+            .header(auth())
+            .header(ContentType::JSON)
+            .body(r#"{"player_name":"Imposter"}"#)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let score: serde_json::Value = response.into_json().unwrap();
+        assert_eq!(score["player_name"], "Trusted");
+        assert!(score["user_id"].is_number());
+        assert_eq!(score["elapsed_ms"], view["elapsed_ms"]);
+        assert_eq!(
+            client
+                .post(format!("/api/player/minesweeper/games/{id}/score"))
+                .header(auth())
+                .header(ContentType::JSON)
+                .body("{}")
+                .dispatch()
+                .status(),
+            Status::Ok
+        );
+        assert_eq!(
+            scores::table
+                .filter(scores::game_id.eq(&id))
+                .count()
+                .get_result::<i64>(&mut pool.get().unwrap())
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            client
+                .post("/api/player/logout")
+                .header(auth())
+                .dispatch()
+                .status(),
+            Status::Ok
+        );
+        assert_eq!(
+            client
+                .get("/api/player/me")
+                .header(auth())
+                .dispatch()
+                .status(),
+            Status::Unauthorized
+        );
+    }
+
+    #[test]
+    fn native_sessions_enforce_ownership_expiry_and_account_revocation() {
+        let (client, _dir, pool) = client();
+        let token = player_login(&client, "Trusted");
+        let auth = || rocket::http::Header::new("Authorization", format!("Bearer {token}"));
+        let response = client
+            .post("/api/player/minesweeper/games")
+            .header(auth())
+            .header(ContentType::JSON)
+            .body(r#"{"mode":"easy"}"#)
+            .dispatch();
+        let view: serde_json::Value = response.into_json().unwrap();
+        let id = view["id"].as_str().unwrap();
+        diesel::update(games::table.find(id))
+            .set(games::user_id.eq(None::<i32>))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        assert_eq!(
+            client
+                .get(format!("/api/player/minesweeper/games/{id}"))
+                .header(auth())
+                .dispatch()
+                .status(),
+            Status::Forbidden
+        );
+        assert_eq!(
+            client
+                .post(format!("/api/player/minesweeper/games/{id}/move"))
+                .header(auth())
+                .header(ContentType::JSON)
+                .body(r#"{"action":"flag","row":0,"column":0}"#)
+                .dispatch()
+                .status(),
+            Status::Forbidden
+        );
+        diesel::update(crate::schema::users::table)
+            .set(crate::schema::users::disabled.eq(true))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        assert_eq!(
+            client
+                .get("/api/player/me")
+                .header(auth())
+                .dispatch()
+                .status(),
+            Status::Unauthorized
+        );
+        diesel::update(crate::schema::users::table)
+            .set((
+                crate::schema::users::disabled.eq(false),
+                crate::schema::users::session_version.eq(1),
+            ))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        assert_eq!(
+            client
+                .get("/api/player/me")
+                .header(auth())
+                .dispatch()
+                .status(),
+            Status::Unauthorized
+        );
+        let token = player_login(&client, "Trusted");
+        diesel::update(wasd5::schema::player_sessions::table)
+            .set(wasd5::schema::player_sessions::expires_at.eq(0))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        assert_eq!(
+            client
+                .get("/api/player/me")
+                .header(rocket::http::Header::new(
+                    "Authorization",
+                    format!("Bearer {token}")
+                ))
+                .dispatch()
+                .status(),
+            Status::Unauthorized
+        );
+    }
+
+    #[test]
+    fn native_login_rate_limits_invalid_credentials() {
+        let (client, _dir, _) = client();
+        for attempt in 0..6 {
+            let response = client
+                .post("/api/player/login")
+                .remote("127.0.0.1:12345".parse().unwrap())
+                .header(ContentType::JSON)
+                .body(r#"{"username":"Trusted","password":"wrong"}"#)
+                .dispatch();
+            assert_eq!(
+                response.status(),
+                if attempt < 5 {
+                    Status::Unauthorized
+                } else {
+                    Status::TooManyRequests
+                }
+            );
+        }
     }
 
     #[test]
@@ -783,9 +1181,12 @@ mod tests {
             .into_string()
             .unwrap();
         assert!(signed_page.contains("data-username=\"Trusted\""));
-        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
-            .set(crate::schema::users::display_name.eq(Some("Visible Player")))
-            .execute(&mut pool.get().unwrap()).unwrap();
+        diesel::update(
+            crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")),
+        )
+        .set(crate::schema::users::display_name.eq(Some("Visible Player")))
+        .execute(&mut pool.get().unwrap())
+        .unwrap();
         let csrf = signed_page
             .split("data-csrf=\"")
             .nth(1)
@@ -850,13 +1251,30 @@ mod tests {
                 .first::<i32>(&mut pool.get().unwrap())
                 .unwrap()
         );
-        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
-            .set(crate::schema::users::display_name.eq(Some("Renamed Player")))
-            .execute(&mut pool.get().unwrap()).unwrap();
-        let boards: serde_json::Value = client.get("/games/minesweeper/api/scores").dispatch().into_json().unwrap();
-        let account_score = boards["easy"].as_array().unwrap().iter()
-            .find(|entry| !entry["user_id"].is_null()).unwrap();
+        diesel::update(
+            crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")),
+        )
+        .set(crate::schema::users::display_name.eq(Some("Renamed Player")))
+        .execute(&mut pool.get().unwrap())
+        .unwrap();
+        let boards: serde_json::Value = client
+            .get("/games/minesweeper/api/scores")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        let account_score = boards["easy"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| !entry["user_id"].is_null())
+            .unwrap();
         assert_eq!(account_score["player_name"], "Renamed Player");
-        assert!(boards["easy"].as_array().unwrap().iter().any(|entry| entry["player_name"] == "Guest"));
+        assert!(
+            boards["easy"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entry| entry["player_name"] == "Guest")
+        );
     }
 }
