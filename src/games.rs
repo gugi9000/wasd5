@@ -16,7 +16,9 @@ type GameResult<T> = Result<T, GameError>;
 pub fn routes() -> Vec<rocket::Route> {
     rocket::routes![
         index,
+        makibishi,
         start,
+        browser_board,
         play,
         submit_score,
         leaderboard,
@@ -142,6 +144,8 @@ struct StartRequest {
     mine_count: Option<usize>,
     #[serde(default)]
     csrf: String,
+    #[serde(default)]
+    require_signed_in: bool,
 }
 
 #[derive(Deserialize)]
@@ -406,7 +410,40 @@ fn start(
     request: Json<StartRequest>,
 ) -> GameResult<Private<Json<GameView>>> {
     csrf(jar, &request.csrf)?;
-    start_game(pool, &request, viewer.identity().map(|(id, _)| id))
+    let user_id = viewer.identity().map(|(id, _)| id);
+    if request.require_signed_in && user_id.is_none() {
+        return Err((
+            Status::Unauthorized,
+            "Your website session expired. Log in again before starting a ranked game.".into(),
+        ));
+    }
+    start_game(pool, &request, user_id)
+}
+
+#[get("/games/makibishi")]
+fn makibishi(
+    viewer: Viewer,
+    navigation: crate::PageNavigation,
+    jar: &CookieJar<'_>,
+) -> Private<Template> {
+    Private(Template::render(
+        "games/makibishi",
+        context! {
+            pages: navigation.0,
+            csrf: crate::ensure_csrf(jar),
+            signed_in: viewer.identity().is_some(),
+            username: viewer.display_name().unwrap_or(""),
+        },
+    ))
+}
+
+#[get("/games/minesweeper/api/games/<id>")]
+fn browser_board(
+    id: String,
+    pool: &State<DbPool>,
+    viewer: Viewer,
+) -> GameResult<Private<Json<GameView>>> {
+    owned_board(&id, pool, viewer.identity().map(|(id, _)| id))
 }
 
 fn start_game(
@@ -797,15 +834,23 @@ fn native_board(
     pool: &State<DbPool>,
     player: wasd5::player_auth::Player,
 ) -> GameResult<Private<Json<GameView>>> {
+    owned_board(&id, pool, Some(player.user.id))
+}
+
+fn owned_board(
+    id: &str,
+    pool: &DbPool,
+    user_id: Option<i32>,
+) -> GameResult<Private<Json<GameView>>> {
     let mut conn = pool.get().map_err(internal)?;
     let game = games::table
-        .find(&id)
+        .find(id)
         .first::<Game>(&mut conn)
         .optional()
         .map_err(internal)?
         .filter(|g| g.created_at >= chrono::Utc::now().timestamp_millis() - 86_400_000)
         .ok_or((Status::NotFound, "Game not found or expired.".into()))?;
-    if game.user_id != Some(player.user.id) {
+    if game.user_id != user_id {
         return Err((
             Status::Forbidden,
             "This game belongs to a different player.".into(),
@@ -868,8 +913,10 @@ mod tests {
             .mount(
                 "/",
                 rocket::routes![
+                    crate::navigation_account,
                     crate::admin::admin_login_get,
                     crate::admin::admin_login_post,
+                    crate::admin::admin_logout,
                     crate::admin::admin_index
                 ],
             )
@@ -956,6 +1003,128 @@ mod tests {
             .unwrap();
         assert!(html.contains("snapshot-miniature"));
         assert!(html.contains(&format!("/games/minesweeper/scores/{}", score["id"])));
+    }
+
+    #[test]
+    fn makibishi_page_uses_website_identity_and_escapes_configuration() {
+        let (_dir, client, pool) = client();
+        let response = client.get("/games/makibishi").dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.headers().get_one("Cache-Control"), Some("private, no-store"));
+        let html = response.into_string().unwrap();
+        assert!(html.contains("id=\"makibishi-canvas\""));
+        assert!(html.contains("id=\"makibishi-config\""));
+        assert!(html.contains("data-signed-in=\"false\""));
+        assert!(html.contains("data-username=\"\""));
+        assert!(html.contains("/admin/login?next=makibishi"));
+        assert!(html.contains("type=\"module\" src=\"/static/makibishi-loader.js\""));
+
+        diesel::update(crate::schema::users::table)
+            .set(crate::schema::users::display_name.eq(Some("\"<script>Visible & Player</script>")))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        let response = client.post("/admin/login")
+            .header(ContentType::Form)
+            .body("username=Trusted&password=password&next=makibishi")
+            .dispatch();
+        assert_eq!(response.status(), Status::SeeOther);
+        assert_eq!(response.headers().get_one("Location"), Some("/games/makibishi"));
+        let html = client.get("/games/makibishi").dispatch().into_string().unwrap();
+        assert!(html.contains("data-signed-in=\"true\""));
+        assert!(html.contains("&quot;&lt;script&gt;Visible &amp; Player&lt;"));
+        assert!(!html.contains("<script>Visible"));
+        assert!(html.contains("/admin/logout"));
+        assert!(!html.contains("password_hash"));
+        assert!(!html.contains("Authorization"));
+    }
+
+    #[test]
+    fn makibishi_login_return_is_allowlisted_for_members_and_gamers() {
+        let (_dir, client, pool) = client();
+        let html = client.get("/admin/login?next=makibishi")
+            .dispatch().into_string().unwrap();
+        assert!(html.contains("value=\"makibishi\""));
+        let html = client.post("/admin/login")
+            .header(ContentType::Form)
+            .body("username=Trusted&password=wrong&next=makibishi")
+            .dispatch().into_string().unwrap();
+        assert!(html.contains("value=\"makibishi\""));
+        diesel::update(crate::schema::users::table)
+            .set(crate::schema::users::role.eq("gamer"))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        for (next, expected) in [
+            ("makibishi", "/games/makibishi"),
+            ("https%3A%2F%2Fexample.com", "/games/minesweeper"),
+        ] {
+            let response = client.post("/admin/login")
+                .header(ContentType::Form)
+                .body(format!("username=Trusted&password=password&next={next}"))
+                .dispatch();
+            assert_eq!(response.status(), Status::SeeOther);
+            assert_eq!(response.headers().get_one("Location"), Some(expected));
+        }
+    }
+
+    #[test]
+    fn browser_board_refresh_checks_website_ownership_and_expiry() {
+        let (_dir, client, pool) = client();
+        assert_eq!(client.post("/admin/login")
+            .header(ContentType::Form)
+            .body("username=Trusted&password=password")
+            .dispatch().status(), Status::SeeOther);
+        let html = client.get("/games/makibishi").dispatch().into_string().unwrap();
+        let csrf = html.split("data-csrf=\"").nth(1).unwrap().split('"').next().unwrap();
+        let view: serde_json::Value = client.post("/games/minesweeper/api/games")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"mode":"easy","csrf":csrf}).to_string())
+            .dispatch().into_json().unwrap();
+        let id = view["id"].as_str().unwrap();
+        let url = format!("/games/minesweeper/api/games/{id}");
+        let response = client.get(&url).dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        assert_eq!(response.headers().get_one("Cache-Control"), Some("private, no-store"));
+        assert_eq!(response.headers().get_one("Vary"), Some("Cookie"));
+        assert_eq!(response.into_json::<serde_json::Value>().unwrap(), view);
+        assert_eq!(client.post(format!("{url}/move"))
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"action":"flag","row":0,"column":0,"csrf":csrf}).to_string())
+            .dispatch().status(), Status::Ok);
+        let refreshed: serde_json::Value = client.get(&url).dispatch().into_json().unwrap();
+        assert_eq!(refreshed["cells"][0]["flagged"], true);
+        assert_eq!(refreshed["clock_started"], true);
+        assert!(refreshed["elapsed_ms"].as_i64().unwrap() >= 0);
+        assert!(refreshed["cells"].as_array().unwrap().iter().all(|cell| cell["mine"] == false));
+        let account: serde_json::Value = client.get("/api/navigation/account")
+            .dispatch().into_json().unwrap();
+        assert_eq!(account["username"], "Trusted");
+
+        // A different account must not read the board, even with its UUID.
+        diesel::update(games::table.find(id)).set(games::user_id.eq(None::<i32>))
+            .execute(&mut pool.get().unwrap()).unwrap();
+        assert_eq!(client.get(&url).dispatch().status(), Status::Forbidden);
+        let owner = crate::schema::users::table.select(crate::schema::users::id)
+            .first::<i32>(&mut pool.get().unwrap()).unwrap();
+        diesel::update(games::table.find(id)).set(games::user_id.eq(Some(owner)))
+            .execute(&mut pool.get().unwrap()).unwrap();
+        client.get("/admin/logout").dispatch();
+        assert_eq!(client.get(&url).dispatch().status(), Status::Forbidden);
+        let account: serde_json::Value = client.get("/api/navigation/account")
+            .dispatch().into_json().unwrap();
+        assert!(account["username"].is_null());
+        assert_eq!(client.post("/games/minesweeper/api/games")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"mode":"easy","csrf":csrf,"require_signed_in":true}).to_string())
+            .dispatch().status(), Status::Unauthorized);
+        assert_eq!(client.post("/games/minesweeper/api/games")
+            .header(ContentType::JSON)
+            .body(serde_json::json!({"mode":"easy","csrf":csrf}).to_string())
+            .dispatch().status(), Status::Ok);
+        diesel::update(games::table.find(id))
+            .set(games::created_at.eq(chrono::Utc::now().timestamp_millis() - 86_400_001))
+            .execute(&mut pool.get().unwrap()).unwrap();
+        assert_eq!(client.get(&url).dispatch().status(), Status::NotFound);
+        assert_eq!(client.get("/games/minesweeper/api/games/missing").dispatch().status(), Status::NotFound);
     }
 
     #[test]

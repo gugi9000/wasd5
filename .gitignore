@@ -13,6 +13,8 @@ pages/
 !/static/minesweeper.css
 !/static/minesweeper.js
 !/static/minesweeper-solver.js
+!/static/makibishi-loader.js
+!/static/makibishi.css
 !/static/tetris-core.js
 !/static/tetris.css
 !/static/tetris.js

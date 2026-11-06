@@ -1,0 +1,23 @@
+{% extends "base" %}
+{% block title %}Makibishi{% endblock title %}
+{% block main_class %}col-12 mb-4{% endblock main_class %}
+{% block sidebar %}{% endblock sidebar %}
+{% block content %}
+<link rel="stylesheet" href="/static/makibishi.css" />
+<section aria-labelledby="makibishi-title">
+    <h1 id="makibishi-title">Makibishi</h1>
+    <p>Play Bevy Minesweeper in your browser. Ranked games use the same server and leaderboards as <a href="/games/minesweeper">Minesweeper</a>.</p>
+    {% if signed_in %}
+    <p>Signed in as <strong>{{ username }}</strong>. <a href="/admin/logout">Log out of the website</a></p>
+    {% else %}
+    <p><a href="/admin/login?next=makibishi">Log in with your website account</a> for verified ranked scores, or play as a guest.</p>
+    {% endif %}
+    <div id="makibishi-config" data-csrf="{{ csrf }}" data-signed-in="{{ signed_in }}" data-username="{{ username }}" hidden></div>
+    <p id="makibishi-status" role="status" aria-live="polite">Loading Makibishi…</p>
+    <noscript><p>JavaScript and WebAssembly must be enabled to play Makibishi.</p></noscript>
+    <div class="makibishi-viewport">
+        <canvas id="makibishi-canvas" tabindex="0" aria-label="Makibishi Minesweeper game">Your browser must support canvas and WebAssembly to play.</canvas>
+    </div>
+</section>
+<script type="module" src="/static/makibishi-loader.js"></script>
+{% endblock content %}

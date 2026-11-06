@@ -282,7 +282,7 @@ pub(crate) fn admin_login_get(
     let csrf = crate::ensure_csrf(jar);
     Template::render(
         "admin/login",
-        context! { pages: pages, csrf: csrf, next: next.filter(|value| matches!(*value, "comics" | "fitness")) },
+        context! { pages: pages, csrf: csrf, next: next.filter(|value| matches!(*value, "comics" | "fitness" | "makibishi")) },
     )
 }
 
@@ -317,6 +317,7 @@ pub(crate) fn admin_login_post(
             let expiry = Utc::now().timestamp() + 24 * 3600;
             jar.add_private(Cookie::new("session_expires", expiry.to_string()));
             return Ok(Redirect::to(match f.next.as_deref() {
+                Some("makibishi") => "/games/makibishi",
                 _ if u.role == "gamer" => "/games/minesweeper",
                 Some("comics") => "/comics",
                 Some("fitness") => "/health/timer",
@@ -328,7 +329,7 @@ pub(crate) fn admin_login_post(
     let csrf = crate::ensure_csrf(jar);
     Err(Template::render(
         "admin/login",
-        context! { error: "Invalid credentials", pages: pages, csrf: csrf, next: f.next.filter(|value| matches!(value.as_str(), "comics" | "fitness")) },
+        context! { error: "Invalid credentials", pages: pages, csrf: csrf, next: f.next.filter(|value| matches!(value.as_str(), "comics" | "fitness" | "makibishi")) },
     ))
 }
 

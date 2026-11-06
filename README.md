@@ -24,6 +24,50 @@ miniature; its player, time and miniature link to the public read-only page at
 Older scores remain valid with no snapshot; boards are never fabricated or
 backfilled from expiring games. Snapshots survive game cleanup and score retries.
 
+### Makibishi browser (Bevy/WASM)
+
+`/games/makibishi` is the public Bevy game page. Deploy its template together
+with `static/makibishi-loader.js`, `static/makibishi.css` and the navigation
+template. Build the client for `wasm32-unknown-unknown`, then run
+`wasm-bindgen --target web --out-name makibishi` against its WASM and deploy
+the generated `makibishi.js` and `makibishi_bg.wasm` to `static/makibishi/`.
+Deploy any client assets there too, preserving their relative paths. Generated
+builds/assets remain ignored by Git; the loader and stylesheet are tracked.
+The existing Rocket static mount serves them at `/static/makibishi/`; reverse
+proxies must serve `.wasm` as `application/wasm`, not an HTML fallback.
+Missing builds and startup failures are shown on the page rather than silently
+leaving a blank canvas.
+
+The client attaches to `#makibishi-canvas` and reads `#makibishi-config`:
+`data-csrf`, `data-signed-in` and `data-username` (the escaped Display Name).
+The page and game refresh responses are private and non-cacheable. Website
+login at `/admin/login?next=makibishi` returns here for all account roles;
+logout uses the existing website navigation. Never collect website passwords
+inside WASM or use/store native bearer tokens in this browser client.
+
+Use same-origin requests with website cookies and JSON bodies:
+
+- `POST /games/minesweeper/api/games`: `mode`, `csrf`, optional custom dimensions.
+  Send `require_signed_in: true` for account-ranked starts: an expired or absent
+  website session then returns 401 instead of silently starting a guest game.
+- `GET /games/minesweeper/api/games/<id>`: refresh an owned board, including the
+  running server `elapsed_ms`. Uses the same ownership checks as moves: signed-in
+  games require that account; guest games use their unguessable ID and no account.
+- `POST /games/minesweeper/api/games/<id>/move`: `action` (`reveal`, `flag`,
+  `chord`), `row`, `column`, `csrf`.
+- `POST /games/minesweeper/api/games/<id>/score`: `csrf`, optional guest
+  `player_name`; signed-in scores always use the account Display Name.
+- `GET /games/minesweeper/api/scores`: the shared public leaderboards above.
+
+Refresh/start/move return `id`, `mode`, `rows`, `columns`, `mine_count`, `cells`,
+`status` (`playing`, `won`, `lost`), `elapsed_ms`, `clock_started`. Cells are
+row-major `{revealed, flagged, mine, count}`; hidden mines/counts stay concealed.
+Games expire after 24 hours. Handle rejected requests after login/logout by
+reloading the page and starting a new game; never submit an offline board.
+For live website identity, `GET /api/navigation/account` returns
+`{username: "<Display Name>" | null, gamer: boolean}` with `private, no-store`.
+Loader tests: `node --test tests/makibishi-loader.test.cjs`.
+
 ### Native Minesweeper client API
 
 The Bevy client uses player-only bearer tokens, separate from browser cookies
