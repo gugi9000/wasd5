@@ -173,7 +173,7 @@
                 if (boards[mode].length === 0) {
                     const row = body.insertRow();
                     const empty = row.insertCell();
-                    empty.colSpan = 3;
+                    empty.colSpan = 4;
                     empty.className = "text-muted";
                     empty.textContent = "No scores yet.";
                     continue;
@@ -182,14 +182,51 @@
                     const row = body.insertRow();
                     row.insertCell().textContent = String(index + 1);
                     const player = row.insertCell();
-                    player.append(document.createTextNode(score.player_name + " "));
+                    const boardUrl = score.board && Number.isInteger(score.id)
+                        ? `/games/minesweeper/scores/${score.id}` : null;
+                    function scoreText(host, text) {
+                        if (boardUrl) {
+                            const link = document.createElement("a");
+                            link.href = boardUrl;
+                            link.textContent = text;
+                            host.append(link);
+                        } else {
+                            host.append(document.createTextNode(text));
+                        }
+                    }
+                    scoreText(player, score.player_name);
+                    player.append(document.createTextNode(" "));
                     const badge = document.createElement("span");
                     badge.title = score.user_id !== null ? "Verified account" : "Anonymous player";
                     badge.setAttribute("role", "img");
                     badge.setAttribute("aria-label", badge.title);
                     badge.textContent = score.user_id !== null ? "✅" : "👻";
                     player.append(badge);
-                    row.insertCell().textContent = elapsedText(score.elapsed_ms);
+                    scoreText(row.insertCell(), elapsedText(score.elapsed_ms));
+                    const preview = row.insertCell();
+                    if (boardUrl) {
+                        const link = document.createElement("a");
+                        link.href = boardUrl;
+                        link.className = "score-snapshot-link";
+                        link.setAttribute("aria-label", `View winning board for ${score.player_name}`);
+                        const snapshot = document.createElement("div");
+                        snapshot.className = "minesweeper-snapshot snapshot-miniature";
+                        snapshot.style.setProperty("--snapshot-columns", String(score.board.columns));
+                        snapshot.setAttribute("aria-hidden", "true");
+                        for (const cell of score.board.cells) {
+                            const tile = document.createElement("span");
+                            tile.className = "minesweeper-cell"
+                                + (cell.revealed ? " revealed" : "")
+                                + (cell.mine ? " snapshot-mine" : cell.count > 0 ? ` number-${cell.count}` : "")
+                                + (cell.flagged ? " flagged" : "");
+                            snapshot.append(tile);
+                        }
+                        link.append(snapshot);
+                        preview.append(link);
+                    } else {
+                        preview.className = "text-muted";
+                        preview.textContent = "Board unavailable";
+                    }
                 });
             }
         } catch (error) {

@@ -51,16 +51,17 @@
                 <h3 class="h5">Easy</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
-                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th><th scope="col">Board</th></tr></thead>
                         <tbody id="scores-easy">
                             {% for score in easy_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
-                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ score.player_name }}</a>{% else %}{{ score.player_name }}{% endif %} {% include "games/score_identity" %}</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</a>{% else %}{{ (score.elapsed_ms / 1000) | round(precision=1) }} s{% endif %}</td>
+                                <td>{% include "games/minesweeper_score_preview" %}</td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            <tr><td colspan="4" class="text-muted">No scores yet.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -70,16 +71,17 @@
                 <h3 class="h5">Intermediate</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
-                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th><th scope="col">Board</th></tr></thead>
                         <tbody id="scores-intermediate">
                             {% for score in intermediate_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
-                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ score.player_name }}</a>{% else %}{{ score.player_name }}{% endif %} {% include "games/score_identity" %}</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</a>{% else %}{{ (score.elapsed_ms / 1000) | round(precision=1) }} s{% endif %}</td>
+                                <td>{% include "games/minesweeper_score_preview" %}</td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            <tr><td colspan="4" class="text-muted">No scores yet.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -89,16 +91,17 @@
                 <h3 class="h5">Advanced</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
-                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th></tr></thead>
+                        <thead><tr><th scope="col">#</th><th scope="col">Player</th><th scope="col">Time</th><th scope="col">Board</th></tr></thead>
                         <tbody id="scores-advanced">
                             {% for score in advanced_scores %}
                             <tr>
                                 <th scope="row">{{ loop.index }}</th>
-                                <td>{{ score.player_name }} {% include "games/score_identity" %}</td>
-                                <td>{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ score.player_name }}</a>{% else %}{{ score.player_name }}{% endif %} {% include "games/score_identity" %}</td>
+                                <td>{% if score.board %}<a href="/games/minesweeper/scores/{{ score.id }}">{{ (score.elapsed_ms / 1000) | round(precision=1) }} s</a>{% else %}{{ (score.elapsed_ms / 1000) | round(precision=1) }} s{% endif %}</td>
+                                <td>{% include "games/minesweeper_score_preview" %}</td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="3" class="text-muted">No scores yet.</td></tr>
+                            <tr><td colspan="4" class="text-muted">No scores yet.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

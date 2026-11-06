@@ -110,13 +110,27 @@ function harness(responses, random = () => 0.5) {
             hidden: false,
             disabled: false,
             textContent: "",
+            children: [],
+            attributes: {},
+            style: {
+                setProperty(name, value) { this[name] = value; },
+            },
             classList: { add() {}, remove() {} },
             addEventListener(type, handler) { listeners.set(`${id}:${type}`, handler); },
-            replaceChildren() {},
-            setAttribute() {},
-            append() {},
+            replaceChildren(...children) { this.children = children; },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            append(...children) { this.children.push(...children); },
             querySelector() { return null; },
-            insertRow() { return { insertCell: () => element("cell") }; },
+            insertRow() {
+                const row = element("row");
+                row.insertCell = () => {
+                    const cell = element("cell");
+                    row.append(cell);
+                    return cell;
+                };
+                this.append(row);
+                return row;
+            },
             focus() {},
         };
     }
@@ -127,6 +141,7 @@ function harness(responses, random = () => 0.5) {
             return elements.get(id);
         },
         createElement: element,
+        createTextNode: (text) => ({ textContent: text }),
         addEventListener(type, handler) { listeners.set(`document:${type}`, handler); },
     };
     vm.runInNewContext(
@@ -145,7 +160,7 @@ function harness(responses, random = () => 0.5) {
             setInterval() { return 0; },
             clearInterval() {},
             async fetch(url, options) {
-                calls.push({ url, body: JSON.parse(options.body) });
+                calls.push({ url, body: options.body ? JSON.parse(options.body) : undefined });
                 const response = responses.shift();
                 assert.ok(response, `Unexpected request: ${url}`);
                 return typeof response === "function"
@@ -299,4 +314,59 @@ test("a solver move failure is shown and stops automatic requests", async () => 
     assert.equal(ui.elements.get("game-status").textContent, "Move failed");
     await ui.advance(60_000);
     assert.equal(ui.calls.length, 2);
+});
+
+test("refreshed leaderboards link every snapshot and safely render legacy scores", async () => {
+    const initial = board(1, 3, 1);
+    const won = structuredClone(initial);
+    won.status = "won";
+    won.cells = [
+        { revealed: true, mine: false, flagged: false, count: 1 },
+        { revealed: false, mine: true, flagged: true, count: 0 },
+        { revealed: true, mine: false, flagged: false, count: 1 },
+    ];
+    const snapshot = { rows: 1, columns: 3, cells: won.cells };
+    const scores = [
+        { id: 11, player_name: "<img onerror=alert(1)>", user_id: 1, elapsed_ms: 1234, board: snapshot },
+        { id: 12, player_name: "Guest", user_id: null, elapsed_ms: 2345, board: snapshot },
+        { id: 1, player_name: "Legacy", user_id: null, elapsed_ms: 3456, board: null },
+    ];
+    const ui = harness([initial, won, scores[0], {
+        easy: scores, intermediate: [], advanced: [scores[1]],
+    }]);
+    ui.listeners.get("new-game:click")();
+    await ui.flush();
+    ui.listeners.get("board-scroll:click")({
+        detail: 0,
+        target: { closest: () => ({ dataset: { index: "0" } }) },
+    });
+    await ui.flush();
+    assert.equal(ui.calls.at(-1).url, "/games/minesweeper/api/scores");
+    const rows = ui.elements.get("scores-easy").children;
+    assert.equal(rows.length, 3);
+    for (const [index, score] of scores.entries()) {
+        const cells = rows[index].children;
+        assert.equal(cells.length, 4);
+        assert.equal(cells[1].children[0].textContent, score.player_name);
+        if (score.board) {
+            const url = `/games/minesweeper/scores/${score.id}`;
+            assert.equal(cells[1].children[0].href, url);
+            assert.equal(cells[2].children[0].href, url);
+            const link = cells[3].children[0];
+            assert.equal(link.href, url);
+            assert.match(link.attributes["aria-label"], /View winning board/);
+            const mini = link.children[0];
+            assert.equal(mini.attributes["aria-hidden"], "true");
+            assert.equal(mini.style["--snapshot-columns"], "3");
+            assert.equal(mini.children.length, 3);
+            assert.match(mini.children[1].className, /snapshot-mine.*flagged/);
+        } else {
+            assert.equal(cells[1].children[0].href, undefined);
+            assert.equal(cells[3].textContent, "Board unavailable");
+        }
+    }
+    assert.equal(ui.elements.get("scores-intermediate").children[0].children[0].colSpan, 4);
+    assert.equal(ui.elements.get("scores-advanced").children[0].children[3].children[0].href,
+        "/games/minesweeper/scores/12");
+    assert.match(ui.elements.get("score-message").textContent, /Score saved/);
 });

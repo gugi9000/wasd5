@@ -16,6 +16,14 @@ it flags deduced mines, reveals safe cells, and guesses randomly when stuck.
 Page interaction stops auto-solving; **New game** starts a fresh board.
 Configure the delay with `IDLE_DELAY_MS` in `static/minesweeper.js`.
 
+New winning scores save an immutable, server-generated board snapshot for both
+browser and native games. Every leaderboard entry with a saved board has a
+miniature; its player, time and miniature link to the public read-only page at
+`/games/minesweeper/scores/<id>`. Migration
+`00000000000024_add_minesweeper_winning_board` runs automatically at startup.
+Older scores remain valid with no snapshot; boards are never fabricated or
+backfilled from expiring games. Snapshots survive game cleanup and score retries.
+
 ### Native Minesweeper client API
 
 The Bevy client uses player-only bearer tokens, separate from browser cookies
@@ -38,6 +46,12 @@ through the reverse proxy. No CORS access is enabled.
   server-completed fixed modes and uses the authenticated Display Name.
   Retrying is idempotent and never creates duplicate scores.
 - `GET /games/minesweeper/api/scores`: public shared top-ten leaderboards.
+  Each score (also returned by either score-submission route) includes its
+  integer database `id` and `board`, either `null` for legacy entries or
+  `{rows, columns, cells}`. Cells are row-major objects with boolean `mine`,
+  `revealed`, `flagged` and integer `count` (0–8). Snapshots disclose all mine
+  positions only after a win, preserve flags/reveals and include safe-cell counts.
+  Both score routes are idempotent and preserve the original snapshot.
 
 Native game requests require bearer authentication, not browser CSRF tokens.
 Browser routes retain their existing cookie/CSRF checks. Tokens are stored

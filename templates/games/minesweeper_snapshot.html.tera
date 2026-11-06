@@ -1,0 +1,5 @@
+<div class="minesweeper-snapshot{% if miniature %} snapshot-miniature{% endif %}" style="--snapshot-columns: {{ score.board.columns }}"{% if miniature %} aria-hidden="true"{% else %} role="group" aria-label="Winning {{ score.board.rows }} by {{ score.board.columns }} Minesweeper board"{% endif %}>
+    {% for cell in score.board.cells %}
+    <span class="minesweeper-cell{% if cell.revealed %} revealed{% endif %}{% if cell.mine %} snapshot-mine{% elif cell.count > 0 %} number-{{ cell.count }}{% endif %}{% if cell.flagged %} flagged{% endif %}"{% if not miniature %} role="img" aria-label="Cell {{ loop.index }}: {% if cell.mine %}mine{% if cell.flagged %}, flagged{% endif %}{% elif cell.count > 0 %}{{ cell.count }} adjacent mines{% else %}empty{% endif %}"{% endif %}>{% if cell.mine %}{% if cell.flagged %}⚑{% else %}✹{% endif %}{% elif cell.count > 0 %}{{ cell.count }}{% endif %}</span>
+    {% endfor %}
+</div>

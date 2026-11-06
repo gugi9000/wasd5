@@ -20,6 +20,7 @@ pub fn routes() -> Vec<rocket::Route> {
         play,
         submit_score,
         leaderboard,
+        score_page,
         native_start,
         native_play,
         native_score,
@@ -63,7 +64,19 @@ struct NewGame<'a> {
     elapsed_ms: Option<i64>,
 }
 
-#[derive(Queryable, Serialize)]
+#[derive(Queryable)]
+struct StoredScore {
+    id: i32,
+    game_id: String,
+    mode: String,
+    player_name: String,
+    user_id: Option<i32>,
+    elapsed_ms: i64,
+    created_at: i64,
+    winning_board: Option<String>,
+}
+
+#[derive(Serialize)]
 struct Score {
     id: i32,
     game_id: String,
@@ -72,9 +85,35 @@ struct Score {
     user_id: Option<i32>,
     elapsed_ms: i64,
     created_at: i64,
+    board: Option<WinningBoard>,
 }
 
-#[derive(Serialize)]
+impl Score {
+    fn from_stored(score: StoredScore) -> GameResult<Self> {
+        Ok(Self {
+            id: score.id,
+            game_id: score.game_id,
+            mode: score.mode,
+            player_name: score.player_name,
+            user_id: score.user_id,
+            elapsed_ms: score.elapsed_ms,
+            created_at: score.created_at,
+            board: score
+                .winning_board
+                .map(|json| serde_json::from_str(&json).map_err(internal))
+                .transpose()?,
+        })
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct WinningBoard {
+    rows: usize,
+    columns: usize,
+    cells: Vec<Cell>,
+}
+
+#[derive(Deserialize, Serialize)]
 struct Cell {
     revealed: bool,
     flagged: bool,
@@ -298,8 +337,11 @@ fn load_leaderboard(conn: &mut SqliteConnection, mode_name: &str) -> GameResult<
         .filter(scores::mode.eq(mode_name))
         .order((scores::elapsed_ms.asc(), scores::created_at.asc()))
         .limit(10)
-        .load::<Score>(conn)
-        .map_err(internal)?;
+        .load::<StoredScore>(conn)
+        .map_err(internal)?
+        .into_iter()
+        .map(Score::from_stored)
+        .collect::<GameResult<Vec<_>>>()?;
     let names =
         crate::models::account_display_names(conn, scores.iter().filter_map(|score| score.user_id))
             .map_err(internal)?;
@@ -309,6 +351,26 @@ fn load_leaderboard(conn: &mut SqliteConnection, mode_name: &str) -> GameResult<
         }
     }
     Ok(scores)
+}
+
+#[get("/games/minesweeper/scores/<id>")]
+fn score_page(
+    id: i32,
+    pool: &State<DbPool>,
+    navigation: crate::PageNavigation,
+) -> GameResult<Template> {
+    let mut conn = pool.get().map_err(internal)?;
+    let stored = scores::table
+        .find(id)
+        .first::<StoredScore>(&mut conn)
+        .optional()
+        .map_err(internal)?
+        .ok_or((Status::NotFound, "Score not found.".into()))?;
+    let score = Score::from_stored(stored)?;
+    Ok(Template::render(
+        "games/minesweeper_score",
+        context! { pages: navigation.0, score: score },
+    ))
 }
 
 #[get("/games/minesweeper")]
@@ -568,9 +630,45 @@ fn save_score(
     display_name: Option<&str>,
 ) -> GameResult<Private<Json<Score>>> {
     let mut conn = pool.get().map_err(internal)?;
+    conn.immediate_transaction::<_, ScoreTransactionError, _>(|conn| {
+        save_score_in_transaction(conn, id, request, identity, display_name)
+            .map_err(ScoreTransactionError)
+    })
+    .map_err(|error| error.0)
+}
+
+struct ScoreTransactionError(GameError);
+
+impl From<diesel::result::Error> for ScoreTransactionError {
+    fn from(error: diesel::result::Error) -> Self {
+        Self(internal(error))
+    }
+}
+
+fn save_score_in_transaction(
+    conn: &mut SqliteConnection,
+    id: &str,
+    request: &ScoreRequest,
+    identity: Option<i32>,
+    display_name: Option<&str>,
+) -> GameResult<Private<Json<Score>>> {
+    if let Some(existing) = scores::table
+        .filter(scores::game_id.eq(id))
+        .first::<StoredScore>(conn)
+        .optional()
+        .map_err(internal)?
+    {
+        if existing.user_id != identity {
+            return Err((
+                Status::Forbidden,
+                "This score belongs to a different player.".into(),
+            ));
+        }
+        return Ok(Private(Json(Score::from_stored(existing)?)));
+    }
     let game = games::table
         .find(id)
-        .first::<Game>(&mut conn)
+        .first::<Game>(conn)
         .optional()
         .map_err(internal)?
         .ok_or((Status::NotFound, "Game not found or expired.".into()))?;
@@ -598,6 +696,28 @@ fn save_score(
         }
         name.to_owned()
     };
+    let (mines, revealed, flags) = deserialize_state(&game)?;
+    let rows = game.rows as usize;
+    let columns = game.board_columns as usize;
+    let board = WinningBoard {
+        rows,
+        columns,
+        cells: mines
+            .iter()
+            .enumerate()
+            .map(|(index, &mine)| Cell {
+                mine,
+                revealed: revealed[index],
+                flagged: flags[index],
+                count: if mine {
+                    0
+                } else {
+                    adjacent_mines(index, &mines, rows, columns)
+                },
+            })
+            .collect(),
+    };
+    let board_json = serde_json::to_string(&board).map_err(internal)?;
     let new_score = (
         scores::game_id.eq(&game.id),
         scores::mode.eq(&game.mode),
@@ -605,31 +725,17 @@ fn save_score(
         scores::user_id.eq(identity),
         scores::elapsed_ms.eq(game.elapsed_ms.unwrap_or_default()),
         scores::created_at.eq(chrono::Utc::now().timestamp_millis()),
+        scores::winning_board.eq(board_json),
     );
     diesel::insert_into(scores::table)
         .values(new_score)
-        .execute(&mut conn)
-        .map_err(|error| {
-            if matches!(
-                &error,
-                diesel::result::Error::DatabaseError(
-                    diesel::result::DatabaseErrorKind::UniqueViolation,
-                    _
-                )
-            ) {
-                (
-                    Status::Conflict,
-                    "This game has already been submitted.".into(),
-                )
-            } else {
-                internal(error)
-            }
-        })?;
+        .execute(conn)
+        .map_err(internal)?;
     let score = scores::table
         .filter(scores::game_id.eq(&game.id))
-        .first::<Score>(&mut conn)
+        .first::<StoredScore>(conn)
         .map_err(internal)?;
-    Ok(Private(Json(score)))
+    Ok(Private(Json(Score::from_stored(score)?)))
 }
 
 #[get("/games/minesweeper/api/scores")]
@@ -676,25 +782,13 @@ fn native_score(
     player: wasd5::player_auth::Player,
     request: Json<ScoreRequest>,
 ) -> GameResult<Private<Json<Score>>> {
-    match save_score(
+    save_score(
         &id,
         pool,
         &request,
         Some(player.user.id),
         Some(player.user.display_name()),
-    ) {
-        Err((status, _)) if status == Status::Conflict => {
-            // Retrying after a lost response must not duplicate a score.
-            let mut conn = pool.get().map_err(internal)?;
-            let score = scores::table
-                .filter(scores::game_id.eq(&id))
-                .filter(scores::user_id.eq(Some(player.user.id)))
-                .first::<Score>(&mut conn)
-                .map_err(internal)?;
-            Ok(Private(Json(score)))
-        }
-        result => result,
-    }
+    )
 }
 
 #[get("/api/player/minesweeper/games/<id>")]
@@ -745,8 +839,11 @@ mod tests {
     use rocket::http::ContentType;
     use rocket::local::blocking::Client;
 
-    fn client() -> (Client, tempfile::TempDir, DbPool) {
-        let dir = tempfile::tempdir().unwrap();
+    fn client() -> (tempfile::TempDir, Client, DbPool) {
+        let dir = tempfile::Builder::new()
+            .prefix(".minesweeper-test-")
+            .tempdir_in(".")
+            .unwrap();
         let pool = db::establish_pool(dir.path().join("games.db").to_str().unwrap());
         let mut conn = pool.get().unwrap();
         db::run_migrations(&mut conn).unwrap();
@@ -777,7 +874,7 @@ mod tests {
                 ],
             )
             .attach(Template::fairing());
-        (Client::tracked(app).unwrap(), dir, pool)
+        (dir, Client::tracked(app).unwrap(), pool)
     }
 
     fn player_login(client: &Client, username: &str) -> String {
@@ -799,9 +896,154 @@ mod tests {
         result["token"].as_str().unwrap().to_owned()
     }
 
+    fn assert_snapshot(client: &Client, pool: &DbPool, score: &serde_json::Value) {
+        assert!(score["id"].as_i64().unwrap() > 0);
+        let game = games::table
+            .find(score["game_id"].as_str().unwrap())
+            .first::<Game>(&mut pool.get().unwrap())
+            .unwrap();
+        let (mines, revealed, flags) = deserialize_state(&game).unwrap();
+        let board = &score["board"];
+        assert_eq!(board["rows"], game.rows);
+        assert_eq!(board["columns"], game.board_columns);
+        assert_eq!(board["cells"].as_array().unwrap().len(), mines.len());
+        for (index, cell) in board["cells"].as_array().unwrap().iter().enumerate() {
+            assert_eq!(cell["mine"], mines[index]);
+            assert_eq!(cell["revealed"], revealed[index]);
+            assert_eq!(cell["flagged"], flags[index]);
+            assert_eq!(
+                cell["count"],
+                if mines[index] {
+                    0
+                } else {
+                    adjacent_mines(
+                        index,
+                        &mines,
+                        game.rows as usize,
+                        game.board_columns as usize,
+                    )
+                }
+            );
+        }
+        let page = client
+            .get(format!("/games/minesweeper/scores/{}", score["id"]))
+            .dispatch();
+        assert_eq!(page.status(), Status::Ok);
+        let html = page.into_string().unwrap();
+        assert!(html.contains("Read-only snapshot"));
+        assert!(html.contains("Back to Minesweeper"));
+        assert!(html.contains("aria-label=\"Cell 1:"));
+        assert_eq!(
+            html.matches("class=\"minesweeper-cell").count(),
+            mines.len()
+        );
+        let boards: serde_json::Value = client
+            .get("/games/minesweeper/api/scores")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        let entry = boards[game.mode]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["id"] == score["id"])
+            .unwrap();
+        assert_eq!(entry["board"], score["board"]);
+        let html = client
+            .get("/games/minesweeper")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(html.contains("snapshot-miniature"));
+        assert!(html.contains(&format!("/games/minesweeper/scores/{}", score["id"])));
+    }
+
+    #[test]
+    fn winning_board_migration_preserves_legacy_scores() {
+        use diesel::connection::SimpleConnection;
+        let mut conn = SqliteConnection::establish(":memory:").unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000001_create_users/up.sql"
+        ))
+        .unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000013_create_minesweeper/up.sql"
+        ))
+        .unwrap();
+        conn.batch_execute("INSERT INTO minesweeper_scores (game_id, mode, player_name, elapsed_ms, created_at) VALUES ('old', 'easy', 'Legacy', 1000, 1)").unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000024_add_minesweeper_winning_board/up.sql"
+        ))
+        .unwrap();
+        let score =
+            Score::from_stored(scores::table.first::<StoredScore>(&mut conn).unwrap()).unwrap();
+        assert_eq!(score.player_name, "Legacy");
+        assert!(score.board.is_none());
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000024_add_minesweeper_winning_board/down.sql"
+        ))
+        .unwrap();
+        conn.batch_execute(include_str!(
+            "../migrations/00000000000024_add_minesweeper_winning_board/up.sql"
+        ))
+        .unwrap();
+        assert_eq!(
+            scores::table.count().get_result::<i64>(&mut conn).unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn legacy_score_pages_are_public_and_names_are_escaped() {
+        let (_dir, client, pool) = client();
+        diesel::insert_into(scores::table)
+            .values((
+                scores::game_id.eq("legacy"),
+                scores::mode.eq("easy"),
+                scores::player_name.eq("<script>alert(1)</script>"),
+                scores::elapsed_ms.eq(1000_i64),
+                scores::created_at.eq(1_i64),
+            ))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        let score = scores::table
+            .first::<StoredScore>(&mut pool.get().unwrap())
+            .unwrap();
+        let page = client
+            .get(format!("/games/minesweeper/scores/{}", score.id))
+            .dispatch();
+        assert_eq!(page.status(), Status::Ok);
+        let html = page.into_string().unwrap();
+        assert!(html.contains("No board was saved"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+        assert!(html.contains("&lt;script&gt;"));
+        let boards: serde_json::Value = client
+            .get("/games/minesweeper/api/scores")
+            .dispatch()
+            .into_json()
+            .unwrap();
+        assert_eq!(boards["easy"][0]["id"], score.id);
+        assert!(boards["easy"][0]["board"].is_null());
+        let html = client
+            .get("/games/minesweeper")
+            .dispatch()
+            .into_string()
+            .unwrap();
+        assert!(html.contains("Board unavailable"));
+        assert!(!html.contains("snapshot-miniature"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+        assert_eq!(
+            client
+                .get("/games/minesweeper/scores/999999")
+                .dispatch()
+                .status(),
+            Status::NotFound
+        );
+    }
+
     #[test]
     fn native_login_ranked_game_and_logout() {
-        let (client, _dir, pool) = client();
+        let (_dir, client, pool) = client();
         let token = player_login(&client, "Trusted");
         let auth = || rocket::http::Header::new("Authorization", format!("Bearer {token}"));
         let stored: String = wasd5::schema::player_sessions::table
@@ -867,6 +1109,17 @@ mod tests {
                 .unwrap(),
         )
         .unwrap();
+        let mine = mines.iter().position(|&mine| mine).unwrap();
+        assert_eq!(
+            client
+                .post(format!("/api/player/minesweeper/games/{id}/move"))
+                .header(auth())
+                .header(ContentType::JSON)
+                .body(serde_json::json!({"action":"flag","row":mine/9,"column":mine%9}).to_string())
+                .dispatch()
+                .status(),
+            Status::Ok
+        );
         for (index, mine) in mines.iter().enumerate() {
             if *mine || view["cells"][index]["revealed"] == true || view["status"] == "won" {
                 continue;
@@ -895,12 +1148,21 @@ mod tests {
         assert_eq!(score["player_name"], "Trusted");
         assert!(score["user_id"].is_number());
         assert_eq!(score["elapsed_ms"], view["elapsed_ms"]);
+        assert_snapshot(&client, &pool, &score);
+        diesel::delete(games::table.find(&id))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        let retry = client
+            .post(format!("/api/player/minesweeper/games/{id}/score"))
+            .header(auth())
+            .header(ContentType::JSON)
+            .body("{}")
+            .dispatch();
+        assert_eq!(retry.status(), Status::Ok);
+        assert_eq!(retry.into_json::<serde_json::Value>().unwrap(), score);
         assert_eq!(
             client
-                .post(format!("/api/player/minesweeper/games/{id}/score"))
-                .header(auth())
-                .header(ContentType::JSON)
-                .body("{}")
+                .get(format!("/games/minesweeper/scores/{}", score["id"]))
                 .dispatch()
                 .status(),
             Status::Ok
@@ -933,7 +1195,7 @@ mod tests {
 
     #[test]
     fn native_sessions_enforce_ownership_expiry_and_account_revocation() {
-        let (client, _dir, pool) = client();
+        let (_dir, client, pool) = client();
         let token = player_login(&client, "Trusted");
         let auth = || rocket::http::Header::new("Authorization", format!("Bearer {token}"));
         let response = client
@@ -1013,7 +1275,7 @@ mod tests {
 
     #[test]
     fn native_login_rate_limits_invalid_credentials() {
-        let (client, _dir, _) = client();
+        let (_dir, client, _pool) = client();
         for attempt in 0..6 {
             let response = client
                 .post("/api/player/login")
@@ -1034,7 +1296,7 @@ mod tests {
 
     #[test]
     fn server_created_board_is_hidden_and_guest_score_requires_a_win() {
-        let (client, _dir, pool) = client();
+        let (_dir, client, pool) = client();
         let page = client.get("/games/minesweeper").dispatch();
         assert_eq!(page.status(), Status::Ok);
         let html = page.into_string().unwrap();
@@ -1158,15 +1420,25 @@ mod tests {
         let score: serde_json::Value = score.into_json().unwrap();
         assert_eq!(score["player_name"], "Guest");
         assert!(score["user_id"].is_null());
-        diesel::update(crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")))
-            .set(crate::schema::users::role.eq("gamer")).execute(&mut pool.get().unwrap()).unwrap();
+        assert_snapshot(&client, &pool, &score);
+        diesel::update(games::table.find(&id))
+            .set(games::mines.eq(serde_json::to_string(&vec![false; 81]).unwrap()))
+            .execute(&mut pool.get().unwrap())
+            .unwrap();
+        diesel::update(
+            crate::schema::users::table.filter(crate::schema::users::username.eq("Trusted")),
+        )
+        .set(crate::schema::users::role.eq("gamer"))
+        .execute(&mut pool.get().unwrap())
+        .unwrap();
 
         let duplicate = client
             .post(format!("/games/minesweeper/api/games/{id}/score"))
             .header(ContentType::JSON)
             .body(serde_json::json!({"player_name":"Imposter","csrf":csrf}).to_string())
             .dispatch();
-        assert_eq!(duplicate.status(), Status::Conflict);
+        assert_eq!(duplicate.status(), Status::Ok);
+        assert_eq!(duplicate.into_json::<serde_json::Value>().unwrap(), score);
 
         assert_eq!(
             client
@@ -1278,7 +1550,11 @@ mod tests {
                 .iter()
                 .any(|entry| entry["player_name"] == "Guest")
         );
-        let page = client.get("/games/minesweeper").dispatch().into_string().unwrap();
+        let page = client
+            .get("/games/minesweeper")
+            .dispatch()
+            .into_string()
+            .unwrap();
         assert!(page.contains("title=\"Verified account\">✅"));
         assert!(page.contains("title=\"Anonymous player\">👻"));
     }

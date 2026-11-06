@@ -1,0 +1,8 @@
+{% if score.board %}
+<a class="score-snapshot-link" href="/games/minesweeper/scores/{{ score.id }}" aria-label="View winning board for {{ score.player_name }}">
+    {% set miniature = true %}
+    {% include "games/minesweeper_snapshot" %}
+</a>
+{% else %}
+<span class="text-muted">Board unavailable</span>
+{% endif %}

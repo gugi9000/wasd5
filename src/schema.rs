@@ -149,6 +149,7 @@ diesel::table! {
         user_id -> Nullable<Integer>,
         elapsed_ms -> BigInt,
         created_at -> BigInt,
+        winning_board -> Nullable<Text>,
     }
 }
 
